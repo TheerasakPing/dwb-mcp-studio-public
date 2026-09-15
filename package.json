@@ -1,0 +1,79 @@
+{
+  "name": "dwb-mcp-studio-core",
+  "version": "0.1.0-beta.12",
+  "private": true,
+  "description": "Local multi-worker MCP broker for a separately installed Desktop Commander",
+  "type": "module",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "bin": {
+    "dwb-mcp-studio-core": "scripts/start.mjs"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "files": [
+    "dist/*.js",
+    "!dist/*-test.js",
+    "!dist/test-policy.js",
+    "scripts/start.mjs",
+    "scripts/config.mjs",
+    "scripts/configure.mjs",
+    "scripts/doctor.mjs",
+    "scripts/setup.ps1",
+    "scripts/setup.xaml",
+    "scripts/setup-common.ps1",
+    "scripts/setup-install.ps1",
+    "docs/",
+    "assets/",
+    "README.md",
+    "THIRD-PARTY.md",
+    "LICENSE",
+    "scripts/tunnel-common.ps1",
+    "scripts/tunnel-setup.ps1",
+    "scripts/tunnel-setup.xaml",
+    "scripts/tunnel-mcp.mjs",
+    "scripts/external-common.ps1",
+    "scripts/dashboard.ps1",
+    "scripts/dashboard.xaml",
+    "scripts/dashboard-probe.mjs",
+    "scripts/upgrade.mjs",
+    "DWB MCP Studio.exe",
+    "scripts/app.ps1",
+    "scripts/launcher.cs",
+    "scripts/build-launcher.ps1"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node scripts/start.mjs",
+    "configure": "node scripts/configure.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "test": "npm run typecheck && npm run build && tsx src/request-context-test.ts && tsx src/payload-guard-test.ts && tsx src/worker-circuit-test.ts && tsx src/session-lifecycle-test.ts && tsx src/workspace-binding-test.ts && node scripts/public-core-test.mjs && node scripts/dashboard-test.mjs",
+    "test:integration": "node scripts/integration-test.mjs",
+    "test:setup": "node scripts/test-powershell.mjs setup-test",
+    "release": "npm run build:launcher && npm run build && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:tunnel": "node scripts/test-powershell.mjs tunnel-test",
+    "test:external": "node scripts/test-powershell.mjs external-test",
+    "test:upgrade": "node scripts/upgrade-test.mjs",
+    "build:launcher": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-launcher.ps1",
+    "test:shell": "node scripts/test-powershell.mjs shell-test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "4.6.2"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "22.20.2",
+    "prettier": "3.9.6",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2"
+  }
+}

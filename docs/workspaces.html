@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ใช้ Workspace ให้ถูกโปรเจกต์ · DWB MCP Studio</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: 'Leelawadee UI', 'Segoe UI', sans-serif;
+        color: #e9f0f7;
+        background: #0e151e;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        line-height: 1.85;
+      }
+      main {
+        max-width: 960px;
+        margin: auto;
+        padding: 40px 28px 72px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding-bottom: 28px;
+        border-bottom: 1px solid #2a3949;
+      }
+      header img {
+        width: 64px;
+        height: 64px;
+        border-radius: 12px;
+      }
+      .brand,
+      .step {
+        color: #63d9e9;
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        font-weight: 600;
+      }
+      header p {
+        margin: 0;
+        color: #acbecf;
+        font-size: 14px;
+      }
+      h1 {
+        font-size: clamp(30px, 5vw, 46px);
+        line-height: 1.4;
+        margin: 36px 0 14px;
+      }
+      h2 {
+        font-size: 23px;
+        line-height: 1.5;
+        margin: 8px 0 14px;
+      }
+      h3 {
+        font-size: 17px;
+        margin-bottom: 6px;
+      }
+      p {
+        margin: 10px 0;
+      }
+      .lead {
+        color: #bbcbd9;
+        font-size: 18px;
+        max-width: 760px;
+      }
+      nav {
+        display: flex;
+        gap: 12px 24px;
+        flex-wrap: wrap;
+        margin: 28px 0;
+      }
+      a {
+        color: #63d9e9;
+        text-underline-offset: 4px;
+      }
+      a:focus-visible {
+        outline: 2px solid #fff;
+        outline-offset: 5px;
+      }
+      section {
+        border-top: 1px solid #2a3949;
+        padding-top: 28px;
+        margin-top: 32px;
+        scroll-margin-top: 20px;
+      }
+      blockquote {
+        margin: 16px 0;
+        padding: 18px 22px;
+        border-left: 3px solid #08b8d2;
+        background: #142330;
+        border-radius: 0 10px 10px 0;
+        font-size: 17px;
+        overflow-wrap: anywhere;
+      }
+      code {
+        font-family: Consolas, monospace;
+        color: #bcebf2;
+        overflow-wrap: anywhere;
+      }
+      .note {
+        color: #acbecf;
+        font-size: 14px;
+      }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        text-align: left;
+      }
+      th,
+      td {
+        border-bottom: 1px solid #2a3949;
+        padding: 14px 12px;
+        vertical-align: top;
+      }
+      th {
+        color: #a5bdcf;
+        font-size: 14px;
+      }
+      th:first-child,
+      td:first-child {
+        width: 35%;
+        padding-left: 0;
+      }
+      li {
+        margin: 8px 0;
+      }
+      footer {
+        margin-top: 40px;
+        color: #8fa6b9;
+        font-size: 13px;
+      }
+      @media (max-width: 560px) {
+        main {
+          padding: 24px 18px 48px;
+        }
+        th,
+        td {
+          padding: 12px 6px;
+        }
+        blockquote {
+          padding: 14px 16px;
+        }
+      }
+      @media print {
+        :root {
+          color-scheme: light;
+          color: #152330;
+          background: white;
+        }
+        .lead,
+        .note,
+        th,
+        footer,
+        header p {
+          color: #334;
+        }
+        a,
+        code,
+        .brand,
+        .step {
+          color: #075667;
+        }
+        blockquote {
+          background: #eef5f7;
+        }
+        main {
+          padding: 0;
+        }
+        nav {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="../assets/dwb-logo.png" alt="Dev with Bebz" width="64" height="64" />
+        <div>
+          <div class="brand">DWB / MCP STUDIO CORE</div>
+          <p>คู่มือ Workspace · เปิดอ่านได้ออฟไลน์</p>
+        </div>
+      </header>
+      <h1>บอกโฟลเดอร์ครั้งแรก<br />เรียกชื่อโปรเจกต์ในครั้งต่อไป</h1>
+      <p class="lead">
+        Workspace คือชื่อที่ผูกกับโฟลเดอร์งานของคุณ
+        ช่วยให้แต่ละแชทใช้ไฟล์และเริ่มคำสั่งในโปรเจกต์ที่ถูกต้อง โดยไม่ต้องพิมพ์ที่อยู่โฟลเดอร์ยาว ๆ
+        ทุกครั้ง
+      </p>
+      <nav aria-label="หัวข้อในคู่มือ">
+        <a href="#first">เริ่มครั้งแรก</a><a href="#next">เปิดแชทใหม่</a
+        ><a href="#cases">เมื่อหาไม่พบ</a><a href="#check">ตรวจและเปลี่ยนโปรเจกต์</a>
+      </nav>
+      <section id="first">
+        <div class="step">01 / เริ่มครั้งแรก</div>
+        <h2>บอกโฟลเดอร์ พร้อมชื่อที่คุณจำง่าย</h2>
+        <p>
+          หลังเชื่อมต่อ DWB กับ AI client แล้ว ลองพิมพ์ข้อความนี้ โดยเปลี่ยน path
+          เป็นโฟลเดอร์ที่มีอยู่จริงในเครื่องคุณ:
+        </p>
+        <blockquote>
+          ทำงานใน D:\Projects\coffee-shop ตั้งชื่อ workspace ว่า “ร้านกาแฟ” และเพิ่ม alias
+          “coffee-shop” ให้ด้วย
+        </blockquote>
+        <p>
+          AI ควรลงทะเบียนโฟลเดอร์และผูก workspace กับแชทนี้ให้ในขั้นตอนเดียว ไม่ต้องสั่ง “สร้าง
+          workspace” แยกอีกครั้ง หากบอกเฉพาะโฟลเดอร์ ชื่อเริ่มต้นจะเป็นชื่อโฟลเดอร์ เช่น
+          <code>coffee-shop</code>
+        </p>
+        <p>
+          <strong>Alias</strong> คือชื่อเรียกอีกชื่อของ workspace เดียวกัน เช่น “ร้านกาแฟ” กับ
+          “coffee-shop” ชี้ไปโฟลเดอร์เดียวกัน ไม่ได้สร้างสำเนาไฟล์
+        </p>
+        <p class="note">
+          DWB รับคำสั่งผ่าน MCP จาก AI ไม่ได้อ่านข้อความแชทโดยตรง หาก AI ยังไม่ผูกให้ ให้บอกว่า
+          “ใช้เครื่องมือ workspace ผูกโฟลเดอร์นี้ก่อนเริ่มงาน” โฟลเดอร์ที่เลือกใน Setup
+          เป็นค่าเริ่มต้นและขอบเขตสิทธิ์เริ่มต้น ยังไม่ได้สร้างชื่อ workspace ให้โดยอัตโนมัติ
+        </p>
+      </section>
+      <section id="next">
+        <div class="step">02 / เปิดแชทใหม่</div>
+        <h2>เรียกชื่อที่ลงทะเบียนไว้ได้เลย</h2>
+        <blockquote>ทำงานใน workspace ร้านกาแฟ</blockquote>
+        <p>หรือใช้ชื่ออีกแบบ:</p>
+        <blockquote>ทำ coffee-shop ต่อ ช่วยตรวจหน้าเมนูให้หน่อย</blockquote>
+        <p>
+          AI จะค้นชื่อหรือ alias แล้วผูก workspace ให้แชทใหม่ เมื่อชื่อตรงกับรายการเดียว
+          คุณไม่ต้องส่ง directory เต็มอีก ใช้ชื่อที่ชัดเจน เช่น “ร้านกาแฟสาขาเชียงใหม่”
+          เมื่อมีหลายโปรเจกต์คล้ายกัน
+        </p>
+        <p>
+          ชื่อเหล่านี้ใช้ได้กับ DWB ที่ใช้ข้อมูลชุดเดิมในเครื่องนี้ แชทสองอันอาจใช้ workspace
+          เดียวกันและไฟล์ชุดเดียวกัน แต่ยังมี worker แยกกันเมื่อระบบแยก session ของแชทได้
+        </p>
+        <p class="note">
+          การเลือก workspace เลือกสถานที่ทำงาน ไม่ได้ส่งประวัติแชทหรือรับประกันว่าจะต่อ process
+          ที่แชทก่อนเปิดทิ้งไว้ คุณยังต้องบอกงานที่ต้องการทำในแชทใหม่
+        </p>
+      </section>
+      <section id="cases">
+        <div class="step">03 / ระบบเลือกอย่างไร</div>
+        <h2>ชื่อชัดเจน งานก็ไปถูกที่</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">สิ่งที่ระบุ</th>
+                <th scope="col">สิ่งที่จะเกิดขึ้น</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>โฟลเดอร์เต็มที่มีอยู่จริง</td>
+                <td>ลงทะเบียนหรือใช้ workspace ที่ตรงกับโฟลเดอร์นั้น แล้วผูกกับแชทนี้</td>
+              </tr>
+              <tr>
+                <td>ชื่อหรือ alias พบรายการเดียว</td>
+                <td>ผูก workspace นั้นให้ ไม่ต้องพิมพ์ path ซ้ำ</td>
+              </tr>
+              <tr>
+                <td>ชื่อซ้ำหรือพบหลายรายการ</td>
+                <td>ต้องเลือกให้ชัด โดยดูชื่อและโฟลเดอร์ที่แสดง หรือใช้ path/ID ที่ตรงตัว</td>
+              </tr>
+              <tr>
+                <td>ชื่อที่ยังไม่รู้จัก</td>
+                <td>
+                  บอกโฟลเดอร์ครั้งแรกและตั้งชื่อให้ก่อน ชื่ออย่างเดียวไม่ทำให้ระบบรู้ตำแหน่งไฟล์
+                </td>
+              </tr>
+              <tr>
+                <td>ไม่บอกชื่อหรือโฟลเดอร์เลย</td>
+                <td>
+                  ยังไม่มี workspace ผูกกับแชทใหม่ และ worker ใช้โฟลเดอร์เริ่มต้นจาก Setup
+                  ระบบไม่เลือกโปรเจกต์จากแชทล่าสุดให้เอง
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section id="check">
+        <div class="step">04 / ใช้งานประจำวัน</div>
+        <h2>ไม่แน่ใจ ก็ให้ AI แสดงชื่อและโฟลเดอร์</h2>
+        <blockquote>แสดง workspace ที่มี พร้อมโฟลเดอร์ของแต่ละตัว</blockquote>
+        <blockquote>แชทนี้ใช้ workspace ไหน และ working directory อะไรอยู่?</blockquote>
+        <blockquote>เปลี่ยนแชทนี้ไปใช้ workspace ร้านกาแฟ</blockquote>
+        <ul>
+          <li>
+            <strong>เปลี่ยนโฟลเดอร์:</strong> เปลี่ยนเฉพาะแชทนี้ worker ว่างเดิมจะถูกคืน
+            และคำขอถัดไปเริ่ม worker ในโฟลเดอร์ใหม่ แชทอื่นยังใช้ค่าของตัวเอง
+          </li>
+          <li>
+            <strong>ยังมีงานรันอยู่:</strong> ให้คำขอ/process/search เดิมจบก่อนเปลี่ยน workspace
+            เพื่อไม่ตัดงานกลางทาง
+          </li>
+          <li>
+            <strong>นอกโฟลเดอร์ที่อนุญาต:</strong> การเลือก workspace ไม่เพิ่มสิทธิ์ไฟล์ให้เอง หาก
+            Desktop Commander ปฏิเสธ ให้ตรวจ <code>allowedDirectories</code> ใน
+            <code>base-policy.json</code> ที่ Setup สร้าง
+            แล้วเพิ่มเฉพาะโฟลเดอร์ที่ต้องการอนุญาตและเริ่ม broker ใหม่
+          </li>
+          <li>
+            <strong>ทำงานไฟล์ร่วมกัน:</strong> การแยก worker ไม่ได้แยกสำเนาไฟล์
+            ระบบช่วยกันเขียนชนกันและกันเขียนนอก workspace สำหรับ file tools ที่รองรับ
+            แต่ไม่ได้ครอบคลุมการแก้ไฟล์ผ่าน shell ทุกชนิด
+          </li>
+        </ul>
+      </section>
+      <footer>
+        ข้อมูลชื่อ workspace, alias และโฟลเดอร์เก็บในเครื่องคุณ ·
+        ตัวอย่างข้อความเลือกและคัดลอกไปใช้ในแชทได้
+      </footer>
+    </main>
+  </body>
+</html>
