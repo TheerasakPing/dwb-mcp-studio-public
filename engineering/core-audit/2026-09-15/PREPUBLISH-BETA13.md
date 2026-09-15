@@ -24,6 +24,7 @@
 - การเขียน event log ล้มเหลวไม่เปลี่ยน tool ที่สำเร็จแล้วให้กลายเป็นคำขอที่ควรทำซ้ำ
 - Setup เรียก TypeScript compiler โดยตรง แก้การ build ในชื่อโฟลเดอร์ที่มีช่องว่างและ `&`
 - จำกัด pending requests ต่อ connection และขนาด buffer ของ broker
+- ปรับ Git line endings ให้ตรงกับ formatter และยืนยัน `format:check` จาก fresh local clone แล้ว
 
 ## ผลรวม
 
@@ -39,8 +40,8 @@
 
 | ชุด                                               | SHA256                                                             |
 | ------------------------------------------------- | ------------------------------------------------------------------ |
-| dwb-mcp-studio-core-0.1.0-beta.13-windows.zip     | `73623f81490dcaf5106fc2c6e9e6eac7b2e0c3d2a83c1700bcbb23c65f6a84ec` |
-| dwb-mcp-studio-core-0.1.0-beta.13-source-test.zip | `051f4dda09a34db5354e2a05066008a8c93bdbcf5950b7fd54274eaced447e9c` |
+| dwb-mcp-studio-core-0.1.0-beta.13-windows.zip     | `41ae29535cd50ff372e2327beb6d68c6aaba79ed37ae2ee71646047e68e2a1a4` |
+| dwb-mcp-studio-core-0.1.0-beta.13-source-test.zip | `1b0384252759483959b107876e77d75eba9ffec7c698109eca9c21951d2d1414` |
 
 ## ขอบเขตการยืนยัน
 

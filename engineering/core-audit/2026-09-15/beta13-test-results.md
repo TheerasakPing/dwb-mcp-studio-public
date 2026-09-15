@@ -101,7 +101,7 @@ UPGRADE_ROLLBACK_PASS: failed final verification restored both configuration fil
 UPGRADE_GUI_PASS: reused dependencies, no npm ci, old installation retained, saved key/tunnel/workspace/policy preserved, paths updated.
 SETUP_TEST_PASS: requirements, safe arguments, GUI save flow, production install, independent worker, generated config.
 LEGACY_ZIP_UPGRADE_PASS: dwb-mcp-studio-core-0.1.0-beta.11-windows.zip
-RELEASE_ZIP_PASS: 73623f81490dcaf5106fc2c6e9e6eac7b2e0c3d2a83c1700bcbb23c65f6a84ec
+RELEASE_ZIP_PASS: 41ae29535cd50ff372e2327beb6d68c6aaba79ed37ae2ee71646047e68e2a1a4
 ```
 
 ## beta13-zip-source.log
@@ -112,5 +112,11 @@ GUI_SETUP_PASS
 UPGRADE_ROLLBACK_PASS: failed final verification restored both configuration files.
 UPGRADE_GUI_PASS: reused dependencies, no npm ci, old installation retained, saved key/tunnel/workspace/policy preserved, paths updated.
 SETUP_TEST_PASS: requirements, safe arguments, GUI save flow, production install, independent worker, generated config.
-RELEASE_ZIP_PASS: 051f4dda09a34db5354e2a05066008a8c93bdbcf5950b7fd54274eaced447e9c
+RELEASE_ZIP_PASS: 1b0384252759483959b107876e77d75eba9ffec7c698109eca9c21951d2d1414
+```
+
+## Git checkout
+
+```text
+FRESH_GIT_CHECKOUT_FORMAT_PASS
 ```
