@@ -57,6 +57,8 @@ function Start-DwbTunnel([string]$TunnelId, [Security.SecureString]$ApiKey, [boo
   $machine = Get-DwbMachineState
   $appRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
   if (-not $machine.NodeReady -or -not (Test-Path -LiteralPath (Get-DwbConfigPath)) -or -not (Test-Path -LiteralPath (Join-Path $appRoot 'node_modules\@modelcontextprotocol\sdk\package.json'))) { throw 'เปิด ตั้งค่าเครื่อง แล้วบันทึกและเตรียมใช้งานให้สำเร็จก่อน' }
+  $runtime=Invoke-DwbNode $machine.Node @((Join-Path $PSScriptRoot 'runtime-control.mjs'),'status') $appRoot | ConvertFrom-Json
+  if($runtime.state -ne 'stopped' -and (-not $runtime.matches)) { throw 'Broker รุ่นเดิมยังทำงานอยู่: จบงาน กด Stop MCP แล้วเปิด ตั้งค่าเครื่อง ในรุ่นนี้ก่อน ข้อมูลเดิมยังอยู่' }
   $root = Get-DwbTunnelDirectory
   $null = New-Item -ItemType Directory -Path $root -Force
   $lock = [IO.File]::Open((Join-Path $root 'start.lock'), 'OpenOrCreate', 'ReadWrite', 'None')

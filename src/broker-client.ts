@@ -1,3 +1,4 @@
+import { runtimeIdentity } from './runtime-identity.js';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createConnection, type Socket } from 'node:net';
@@ -75,6 +76,7 @@ type Pending = {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timer: NodeJS.Timeout;
+  cleanup: () => void;
 };
 
 export class BrokerClient {
@@ -113,12 +115,24 @@ export class BrokerClient {
         { cwd, adapterPid: process.pid },
         10_000,
       )) as any;
+      client.verifyRuntime(hello);
       client.sessionId = hello.sessionId;
       return client;
     } catch (error) {
       socket.destroy();
       throw error;
     }
+  }
+
+  private verifyRuntime(hello: any): void {
+    const running = hello?.broker?.runtime;
+    if (
+      running?.version !== runtimeIdentity.version ||
+      running?.appRoot?.toLowerCase() !== runtimeIdentity.appRoot.toLowerCase()
+    )
+      throw new Error(
+        'DWB_RUNTIME_MISMATCH: another release is still running. Finish its work, Stop MCP, then open Setup in this release to update the broker. Saved settings are retained.',
+      );
   }
 
   private onData(chunk: string): void {
@@ -146,6 +160,7 @@ export class BrokerClient {
     if (!pending) return;
     this.pending.delete(message.id);
     clearTimeout(pending.timer);
+    pending.cleanup();
     if (message.ok) pending.resolve(message.result);
     else {
       const error = new Error(message.error?.message ?? 'Broker request failed');
@@ -157,7 +172,13 @@ export class BrokerClient {
   private failPending(error: Error): void {
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(error);
+      pending.cleanup();
+      pending.reject(
+        new Error(
+          'DWB_OUTCOME_UNKNOWN: broker connection was lost. Dispatched work may still finish; inspect status/files before retrying. ' +
+            error.message,
+        ),
+      );
       this.pending.delete(id);
     }
   }
@@ -181,6 +202,7 @@ export class BrokerClient {
           },
           10_000,
         )) as any;
+        this.verifyRuntime(hello);
         this.sessionId = hello.sessionId;
       } catch (error) {
         socket.destroy();
@@ -196,16 +218,33 @@ export class BrokerClient {
     method: BrokerRequest['method'],
     params?: Record<string, unknown>,
     timeoutMs = 120_000,
+    signal?: AbortSignal,
   ): Promise<unknown> {
+    if (signal?.aborted) return Promise.reject(signal.reason);
     if (this.socket.destroyed) return Promise.reject(new Error('DWB broker connection is closed'));
     const id = randomUUID();
-    const message: BrokerRequest = { id, method, params };
+    const message: BrokerRequest = { id, method, params, deadline: Date.now() + timeoutMs };
     return new Promise((resolveRequest, rejectRequest) => {
+      const cancel = () => {
+        if (!this.socket.destroyed)
+          this.socket.write(
+            JSON.stringify({ id: randomUUID(), method: 'cancel', params: { requestId: id } }) +
+              '\n',
+          );
+      };
+      const cleanup = () => signal?.removeEventListener('abort', cancel);
+      signal?.addEventListener('abort', cancel, { once: true });
       const timer = setTimeout(() => {
+        cleanup();
         this.pending.delete(id);
-        rejectRequest(new Error(`DWB broker request timed out: ${method}`));
-      }, timeoutMs);
-      this.pending.set(id, { resolve: resolveRequest, reject: rejectRequest, timer });
+        cancel();
+        rejectRequest(
+          new Error(
+            'DWB_OUTCOME_UNKNOWN: broker did not acknowledge the deadline. Waiting work is cancelled by the broker; dispatched work may still finish. Inspect status/files before retrying.',
+          ),
+        );
+      }, timeoutMs + 1000);
+      this.pending.set(id, { resolve: resolveRequest, reject: rejectRequest, timer, cleanup });
       this.socket.write(JSON.stringify(message) + '\n');
     });
   }
@@ -214,35 +253,61 @@ export class BrokerClient {
     method: BrokerRequest['method'],
     params?: Record<string, unknown>,
     timeoutMs = 120_000,
+    signal?: AbortSignal,
   ): Promise<unknown> {
     await this.ensureConnected();
-    return this.sendRaw(method, params, timeoutMs);
+    return this.sendRaw(method, params, timeoutMs, signal);
   }
 
-  listTools(context?: BrokerLogicalContext | null): Promise<any> {
-    return this.request('list_tools', context ? { context } : {}) as Promise<any>;
+  listTools(context?: BrokerLogicalContext | null, signal?: AbortSignal): Promise<any> {
+    return this.request('list_tools', context ? { context } : {}, 120_000, signal) as Promise<any>;
   }
 
   callTool(
     name: string,
     args: Record<string, unknown>,
     context?: BrokerLogicalContext | null,
+    signal?: AbortSignal,
   ): Promise<any> {
-    return this.request('call_tool', {
-      name,
-      arguments: args,
-      ...(context ? { context } : {}),
-    }) as Promise<any>;
+    return this.request(
+      'call_tool',
+      {
+        name,
+        arguments: args,
+        ...(context ? { context } : {}),
+      },
+      120_000,
+      signal,
+    ) as Promise<any>;
   }
 
-  listResources(context?: BrokerLogicalContext | null): Promise<any> {
-    return this.request('list_resources', context ? { context } : {}) as Promise<any>;
+  listResources(context?: BrokerLogicalContext | null, signal?: AbortSignal): Promise<any> {
+    return this.request(
+      'list_resources',
+      context ? { context } : {},
+      120_000,
+      signal,
+    ) as Promise<any>;
   }
-  listResourceTemplates(context?: BrokerLogicalContext | null): Promise<any> {
-    return this.request('list_resource_templates', context ? { context } : {}) as Promise<any>;
+  listResourceTemplates(context?: BrokerLogicalContext | null, signal?: AbortSignal): Promise<any> {
+    return this.request(
+      'list_resource_templates',
+      context ? { context } : {},
+      120_000,
+      signal,
+    ) as Promise<any>;
   }
-  readResource(uri: string, context?: BrokerLogicalContext | null): Promise<any> {
-    return this.request('read_resource', { uri, ...(context ? { context } : {}) }) as Promise<any>;
+  readResource(
+    uri: string,
+    context?: BrokerLogicalContext | null,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    return this.request(
+      'read_resource',
+      { uri, ...(context ? { context } : {}) },
+      120_000,
+      signal,
+    ) as Promise<any>;
   }
 
   ping(): Promise<any> {

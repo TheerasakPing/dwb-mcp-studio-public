@@ -69,7 +69,7 @@ try {
         runtime: await runtimeStatus(),
         isolation: 'Per-worker config via an in-memory loader; external files are unchanged.',
         transport:
-          'Local stdio. Download and configure a separate tunnel if your client requires a remote URL.',
+          'Local stdio with the managed OpenAI tunnel. Open DWB MCP Studio.exe, enter your Tunnel ID and API key, then select Start MCP.',
       },
       null,
       2,

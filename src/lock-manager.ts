@@ -74,7 +74,13 @@ export class LockManager {
     state.readers.set(owner, (state.readers.get(owner) ?? 0) + 1);
   }
 
-  private async acquireOne(key: string, owner: string, mode: Mode): Promise<number> {
+  private async acquireOne(
+    key: string,
+    owner: string,
+    mode: Mode,
+    signal?: AbortSignal,
+  ): Promise<number> {
+    signal?.throwIfAborted();
     const state = this.state(key);
     const canAcquire = mode === 'read' ? this.canRead(state, owner) : this.canWrite(state, owner);
     if (canAcquire) {
@@ -82,7 +88,27 @@ export class LockManager {
       return 0;
     }
     const queuedAt = performance.now();
-    await new Promise<void>((resolve) => state.queue.push({ resolve, owner, mode, queuedAt }));
+    await new Promise<void>((resolve, reject) => {
+      const waiter: Waiter = {
+        resolve: () => {
+          signal?.removeEventListener('abort', abort);
+          resolve();
+        },
+        owner,
+        mode,
+        queuedAt,
+      };
+      const abort = () => {
+        const index = state.queue.indexOf(waiter);
+        if (index < 0) return;
+        state.queue.splice(index, 1);
+        reject(signal?.reason);
+        this.processQueue(key, state);
+        if (!state.writer && !state.readers.size && !state.queue.length) this.locks.delete(key);
+      };
+      state.queue.push(waiter);
+      signal?.addEventListener('abort', abort, { once: true });
+    });
     return Math.round(performance.now() - queuedAt);
   }
 
@@ -115,13 +141,18 @@ export class LockManager {
       this.locks.delete(key);
   }
 
-  async acquire(keys: string[], owner: string, mode: Mode = 'write'): Promise<LockLease> {
+  async acquire(
+    keys: string[],
+    owner: string,
+    mode: Mode = 'write',
+    signal?: AbortSignal,
+  ): Promise<LockLease> {
     const ordered = [...new Set(keys.filter(Boolean))].sort();
     const acquired: string[] = [];
     let waitMs = 0;
     try {
       for (const key of ordered) {
-        waitMs += await this.acquireOne(key, owner, mode);
+        waitMs += await this.acquireOne(key, owner, mode, signal);
         acquired.push(key);
       }
     } catch (error) {

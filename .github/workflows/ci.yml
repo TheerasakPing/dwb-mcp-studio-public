@@ -12,4 +12,30 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm test
+      - name: Install external worker for integration tests
+        shell: pwsh
+        run: |
+          npm install --prefix "$env:RUNNER_TEMP/dwb-worker" --save-exact '@wonderwhy-er/desktop-commander@0.2.50'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "DWB_WORKER_ENTRY=$env:RUNNER_TEMP/dwb-worker/node_modules/@wonderwhy-er/desktop-commander/dist/index.js" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - run: npm run test:integration
+      - run: npm run test:external
+      - run: npm run test:upgrade
+      - run: npm run test:runtime-upgrade
+      - run: npm run test:setup
+      - run: npm run test:tunnel
+      - run: npm run build:launcher
+      - run: npm run test:shell
       - run: npm run release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-beta
+          path: |
+            releases/*.zip
+            releases/*.sha256
+
+      - name: Verify downloaded ZIP setup
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem releases/*-windows.zip | Select-Object -First 1
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release-test.ps1 -Zip $zip.FullName

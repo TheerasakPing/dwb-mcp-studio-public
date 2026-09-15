@@ -1,6 +1,25 @@
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
-import { isAbsolute, normalize, resolve } from 'node:path';
+import { lstatSync, realpathSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
+
+// Resolve junctions, including the existing parent of a file not created yet.
+// Never fall back to a lexical path on access errors or broken links.
+export function physicalPath(path: string): string {
+  let parent = resolve(path);
+  const missing: string[] = [];
+  while (true) {
+    try {
+      const result = join(realpathSync.native(parent), ...missing);
+      return process.platform === 'win32' ? result.toLowerCase() : result;
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT' || dirname(parent) === parent) throw error;
+      if (lstatSync(parent, { throwIfNoEntry: false })?.isSymbolicLink()) throw error;
+      missing.unshift(basename(parent));
+      parent = dirname(parent);
+    }
+  }
+}
 
 export type FileFingerprint = {
   exists: boolean;
@@ -23,7 +42,7 @@ export class StaleFileConflictError extends Error {
 export function canonicalPath(value: unknown, cwd: string): string | null {
   if (typeof value !== 'string' || !value.trim()) return null;
   if (/^https?:\/\//i.test(value)) return null;
-  return normalize(isAbsolute(value) ? value : resolve(cwd, value));
+  return physicalPath(normalize(isAbsolute(value) ? value : resolve(cwd, value)));
 }
 
 export async function fingerprint(path: string): Promise<FileFingerprint> {
@@ -133,7 +152,7 @@ export function planTool(
     ['start_process', 'interact_with_process', 'force_terminate', 'kill_process'].includes(name)
   ) {
     return {
-      locks: [`workspace-process:${workspaceKey.toLowerCase()}`],
+      locks: [`workspace-process:${physicalPath(workspaceKey)}`],
       observe: [],
       mutate: [],
       kind: 'workspace-mutation',

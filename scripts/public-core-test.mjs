@@ -40,7 +40,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
  else if(request.params.name === 'list_sessions') value='No active sessions';
  else if(request.params.name === 'list_searches') value='No active searches';
  else if(request.params.name === 'read_file') value=await readFile(args.path,'utf8');
- else if(request.params.name === 'write_file') { await writeFile(args.path,args.content); value='written'; }
+ else if(request.params.name === 'write_file') { if(args.delay) await new Promise(r=>setTimeout(r,args.delay)); await writeFile(args.path,args.content); value='written'; }
  else value=[];
  return {content:[{type:'text',text:JSON.stringify(value)}]};
 });
@@ -265,6 +265,77 @@ try {
     1,
     'One connection can attach only once',
   );
+  // Exercise deadlines over the real broker wire, including its response contract.
+  const socket = createConnection(report.brokerEndpoint);
+  socket.setEncoding('utf8');
+  await new Promise((done, reject) => {
+    socket.once('connect', done);
+    socket.once('error', reject);
+  });
+  let wireBuffer = '';
+  let nextId = 0;
+  const pending = new Map();
+  const counts = new Map();
+  socket.on('data', (chunk) => {
+    wireBuffer += chunk;
+    let end;
+    while ((end = wireBuffer.indexOf('\n')) >= 0) {
+      const message = JSON.parse(wireBuffer.slice(0, end));
+      wireBuffer = wireBuffer.slice(end + 1);
+      counts.set(message.id, (counts.get(message.id) ?? 0) + 1);
+      pending.get(message.id)?.(message);
+      pending.delete(message.id);
+    }
+  });
+  const rpc = (method, params = {}, timeout = 5000) =>
+    new Promise((done, reject) => {
+      const id = 'wire-' + ++nextId;
+      const timer = setTimeout(() => reject(new Error('Wire request timed out: ' + method)), 8000);
+      pending.set(id, (value) => {
+        clearTimeout(timer);
+        done(value);
+      });
+      socket.write(JSON.stringify({ id, method, params, deadline: Date.now() + timeout }) + '\n');
+    });
+  try {
+    assert.equal((await rpc('hello', { cwd: testDir })).ok, true);
+    const queuedPath = resolve(testDir, 'cancelled-before-dispatch.txt');
+    const queued = await rpc(
+      'call_tool',
+      { name: 'write_file', arguments: { path: queuedPath, content: 'must not exist' } },
+      40,
+    );
+    assert.equal(queued.error.code, 'DWB_REQUEST_CANCELLED');
+    await assert.rejects(readFile(queuedPath), { code: 'ENOENT' });
+    assert.equal((await rpc('inspect')).result.broker.queueDepth, 0);
+    for (const entry of clients) await entry.client.close();
+    await rpc('call_tool', { name: 'get_config' });
+    const delayedPath = resolve(testDir, 'completed-after-deadline.txt');
+    const dispatched = await rpc(
+      'call_tool',
+      {
+        name: 'write_file',
+        arguments: { path: delayedPath, content: 'completed once', delay: 250 },
+      },
+      75,
+    );
+    assert.equal(dispatched.error.code, 'DWB_OUTCOME_PENDING');
+    const busy = await rpc('prepare_upgrade');
+    assert.match(busy.error.message, /DWB_UPGRADE_BUSY/);
+    await new Promise((done) => setTimeout(done, 350));
+    assert.equal(await readFile(delayedPath, 'utf8'), 'completed once');
+    assert.equal(
+      counts.get(dispatched.id),
+      1,
+      'A deadline must not produce a second reply after completion',
+    );
+    assert.equal((await rpc('inspect')).result.broker.inFlightCalls, 0);
+    const prepared = await rpc('prepare_upgrade');
+    assert.equal(prepared.ok, true);
+    assert.equal(prepared.result.shuttingDown, true);
+  } finally {
+    socket.destroy();
+  }
   console.log(
     'PUBLIC_CORE_PASS: relocated launcher, generated config, missing dependency, read-only Doctor, core-only tools, 2 isolated workers, real OS home, unchanged external files, workspace boundary, stale-write protection, broker singleton, duplicate hello',
   );

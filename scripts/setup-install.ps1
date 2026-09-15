@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$RequestFile)
+param([Parameter(Mandatory=$true)][string]$RequestFile)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'setup-common.ps1')
 . (Join-Path $PSScriptRoot 'external-common.ps1')
@@ -47,8 +47,11 @@ try {
   }
   if ($rebuild) {
     Set-Phase 'building'
-    Invoke-DwbNode $machine.Node @($machine.Npm, 'run', 'build') $ProjectRoot | Write-Output
+    Invoke-DwbNode $machine.Node @((Join-Path $ProjectRoot 'node_modules\typescript\bin\tsc'), '-p', (Join-Path $ProjectRoot 'tsconfig.json')) $ProjectRoot | Write-Output
   }
+  Set-Phase 'runtime'
+  . (Join-Path $PSScriptRoot 'runtime-upgrade.ps1')
+  Stop-DwbRuntimeForSetup $machine.Node
   foreach ($file in @((Get-DwbConfigPath), (Join-Path (Split-Path -Parent (Get-DwbConfigPath)) 'mcp-client.json'))) {
     if (Test-Path -LiteralPath $file) { $backups[$file]=[IO.File]::ReadAllBytes($file) } else { $backups[$file]=$null }
   }

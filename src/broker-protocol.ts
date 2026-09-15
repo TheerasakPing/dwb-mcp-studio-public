@@ -31,7 +31,10 @@ export type BrokerRequest = {
     | 'read_resource'
     | 'ping'
     | 'inspect'
-    | 'shutdown';
+    | 'shutdown'
+    | 'cancel'
+    | 'prepare_upgrade';
+  deadline?: number;
   params?: Record<string, unknown>;
 };
 

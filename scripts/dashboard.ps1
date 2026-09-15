@@ -22,7 +22,16 @@ function Apply-Snapshot($Data){
   $running=$Data.state -eq 'running'
   (Find 'BrokerStatus').Text=switch($Data.state){'running'{'ทำงานอยู่'} 'stopped'{'ยังไม่เปิด'} 'setup-required'{'รอตั้งค่า'} 'upgrade-required'{'รุ่นเดิม'} default{'ไม่ตอบสนอง'}}
   (Find 'BrokerStatus').Foreground=if($running){'#81D7B5'}else{'#EDB77D'}
-  (Find 'BrokerDetail').Text=if($running){'PID '+$Data.broker.brokerPid}elseif($Data.state -eq 'upgrade-required'){'เริ่ม broker ใหม่หลังจบงานเพื่อดูรายละเอียด'}else{'เปิดอัตโนมัติเมื่อแชทเชื่อมต่อ'}
+  (Find 'BrokerDetail').Text=if($running){'PID '+$Data.broker.brokerPid+' · '+$(if($Data.broker.runtime.version){$Data.broker.runtime.version}else{'legacy'})}elseif($Data.state -eq 'upgrade-required'){'เริ่ม broker ใหม่หลังจบงานเพื่อดูรายละเอียด'}else{'เปิดอัตโนมัติเมื่อแชทเชื่อมต่อ'}
+  if($Data.runtimeMismatch -or $Data.state -eq 'upgrade-required'){
+    (Find 'BrokerStatus').Text='รออัปเดต broker'
+    (Find 'BrokerStatus').Foreground='#EDB77D'
+    (Find 'ActionStatus').Text='จบงานเดิม → Stop MCP → ตั้งค่าเครื่อง เพื่อเปลี่ยนเป็นรุ่นนี้ ข้อมูลเดิมยังอยู่'
+  }elseif($Data.broker.persistence.healthy -eq $false){
+    (Find 'BrokerStatus').Text='บันทึก session ไม่สำเร็จ'
+    (Find 'BrokerStatus').Foreground='#EDB77D'
+    (Find 'ActionStatus').Text='ตรวจพื้นที่ว่างและสิทธิ์โฟลเดอร์ข้อมูล · ผลงานที่ทำแล้วไม่ต้องสั่งซ้ำ'
+  }
   (Find 'Workers').Text=if($running){[string]$Data.broker.activeWorkers+' / '+$Data.broker.workerCap}else{'—'}
   (Find 'WorkerDetail').Text=if($running){'กำลังเปิด '+$Data.broker.startingWorkers+' · กำลังปิด '+$Data.broker.stoppingWorkers}else{'จำนวนที่เปิด / สูงสุด'}
   (Find 'Queue').Text=if($running){[string]$Data.broker.queueDepth}else{'—'}

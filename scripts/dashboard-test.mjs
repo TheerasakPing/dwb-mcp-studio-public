@@ -11,6 +11,7 @@ await writeFile(
   log,
   [
     JSON.stringify({ ts: '2026-01-01T00:00:00Z', type: 'worker_heartbeat' }),
+    JSON.stringify({ ts: '2026-01-01T00:00:00Z', type: 'broker_heartbeat' }),
     JSON.stringify({
       ts: '2026-01-01T00:00:01Z',
       type: 'worker_start_failed',

@@ -12,8 +12,8 @@ export class CoreStore {
     mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     this.db.exec(`
-      PRAGMA journal_mode=WAL;
       PRAGMA busy_timeout=5000;
+      PRAGMA journal_mode=WAL;
       CREATE TABLE IF NOT EXISTS workspaces (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, root_path TEXT NOT NULL UNIQUE COLLATE NOCASE,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -29,6 +29,17 @@ export class CoreStore {
   }
   close() {
     this.db.close();
+  }
+  transaction<T>(action: () => T): T {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const result = action();
+      this.db.exec('COMMIT');
+      return result;
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
   run(sql: string, params: any[] = []) {
     return this.db.prepare(sql).run(...params);

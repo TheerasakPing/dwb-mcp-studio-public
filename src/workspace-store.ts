@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
-import { basename, isAbsolute, relative, resolve } from 'node:path';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { CoreStore } from './core-store.js';
+import { physicalPath } from './file-observer.js';
 
 export type WorkspaceView = {
   id: string;
@@ -28,8 +29,8 @@ function key(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
 export function pathWithin(root: string, target: string): boolean {
-  const rel = relative(resolve(root), resolve(target));
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+  const rel = relative(physicalPath(root), physicalPath(target));
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
 export class WorkspaceStore {
@@ -169,49 +170,54 @@ export class WorkspaceStore {
     const info = await stat(root).catch(() => null);
     if (!info?.isDirectory())
       throw new Error(`Workspace path is not an existing directory: ${root}`);
-    const now = new Date().toISOString();
-    const existing = this.db.one<any>('SELECT * FROM workspaces WHERE lower(root_path)=lower(?)', [
-      root,
-    ]);
-    const name = text(args.name) || (existing ? String(existing.name) : basename(root));
-    let id = existing ? String(existing.id) : `ws_${randomUUID().slice(0, 8)}`;
-    if (!existing) {
-      this.db.run(
-        'INSERT INTO workspaces(id,name,root_path,created_at,updated_at) VALUES (?,?,?,?,?)',
-        [id, name, root, now, now],
+    return this.db.transaction(() => {
+      const now = new Date().toISOString();
+      const existing = this.db.one<any>(
+        'SELECT * FROM workspaces WHERE lower(root_path)=lower(?)',
+        [root],
       );
-    } else if (name !== String(existing.name)) {
-      this.db.run('UPDATE workspaces SET name=?,updated_at=? WHERE id=?', [name, now, id]);
-    }
-    const autoAliases = [name, basename(root), key(name).replace(/[^a-z0-9]+/g, '-')];
-    // Distinct projects may have the same folder name. Keep explicit aliases unique,
-    // but do not prevent binding an exact directory because an automatic alias exists.
-    const availableAliases = autoAliases.filter((alias) => {
-      const owner = this.db.one<any>(
-        'SELECT workspace_id FROM workspace_aliases WHERE lower(alias)=lower(?)',
-        [alias],
-      );
-      return !owner || String(owner.workspace_id) === id;
+      const name = text(args.name) || (existing ? String(existing.name) : basename(root));
+      let id = existing ? String(existing.id) : `ws_${randomUUID().slice(0, 8)}`;
+      if (!existing) {
+        this.db.run(
+          'INSERT INTO workspaces(id,name,root_path,created_at,updated_at) VALUES (?,?,?,?,?)',
+          [id, name, root, now, now],
+        );
+      } else if (name !== String(existing.name)) {
+        this.db.run('UPDATE workspaces SET name=?,updated_at=? WHERE id=?', [name, now, id]);
+      }
+      const autoAliases = [name, basename(root), key(name).replace(/[^a-z0-9]+/g, '-')];
+      // Distinct projects may have the same folder name. Keep explicit aliases unique,
+      // but do not prevent binding an exact directory because an automatic alias exists.
+      const availableAliases = autoAliases.filter((alias) => {
+        const owner = this.db.one<any>(
+          'SELECT workspace_id FROM workspace_aliases WHERE lower(alias)=lower(?)',
+          [alias],
+        );
+        return !owner || String(owner.workspace_id) === id;
+      });
+      this.addAliases(id, [...availableAliases, ...strings(args.aliases)], now);
+      this.event(id, existing ? 'registered_again' : 'registered', sessionId ?? null, {
+        root,
+        name,
+      });
+      return this.view(this.row(id));
     });
-    this.addAliases(id, [...availableAliases, ...strings(args.aliases)], now);
-    this.event(id, existing ? 'registered_again' : 'registered', sessionId ?? null, {
-      root,
-      name,
-    });
-    return this.view(this.row(id));
   }
 
   bindKnown(sessionId: string, workspace: WorkspaceView): WorkspaceView {
-    const now = new Date().toISOString();
-    this.db.run(
-      [
-        'INSERT INTO session_workspace_bindings(session_id,workspace_id,bound_at,updated_at) VALUES (?,?,?,?)',
-        'ON CONFLICT(session_id) DO UPDATE SET workspace_id=excluded.workspace_id,updated_at=excluded.updated_at',
-      ].join(' '),
-      [sessionId, workspace.id, now, now],
-    );
-    this.event(workspace.id, 'bound', sessionId, {});
-    return workspace;
+    return this.db.transaction(() => {
+      const now = new Date().toISOString();
+      this.db.run(
+        [
+          'INSERT INTO session_workspace_bindings(session_id,workspace_id,bound_at,updated_at) VALUES (?,?,?,?)',
+          'ON CONFLICT(session_id) DO UPDATE SET workspace_id=excluded.workspace_id,updated_at=excluded.updated_at',
+        ].join(' '),
+        [sessionId, workspace.id, now, now],
+      );
+      this.event(workspace.id, 'bound', sessionId, {});
+      return workspace;
+    });
   }
   async resolveBinding(args: Record<string, unknown>, sessionId: string): Promise<WorkspaceView> {
     const ref =
@@ -237,10 +243,12 @@ export class WorkspaceStore {
   }
 
   unbind(sessionId: string) {
-    const current = this.current(sessionId);
-    this.db.run('DELETE FROM session_workspace_bindings WHERE session_id=?', [sessionId]);
-    if (current) this.event(current.id, 'unbound', sessionId, {});
-    return { unbound: Boolean(current), previous: current };
+    return this.db.transaction(() => {
+      const current = this.current(sessionId);
+      this.db.run('DELETE FROM session_workspace_bindings WHERE session_id=?', [sessionId]);
+      if (current) this.event(current.id, 'unbound', sessionId, {});
+      return { unbound: Boolean(current), previous: current };
+    });
   }
 
   async handle(args: Record<string, unknown>, sessionId: string) {

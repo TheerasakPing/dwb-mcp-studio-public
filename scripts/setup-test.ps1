@@ -1,4 +1,5 @@
-﻿$ErrorActionPreference = 'Stop'
+param([string]$PreviousSource)
+$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'setup-common.ps1')
 $ProjectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $TestRoot = Join-Path $ProjectRoot ('logs\setup-ui-test-' + [Guid]::NewGuid().ToString('N').Substring(0,8))
@@ -13,8 +14,12 @@ Assert (-not (Test-DwbNodeVersion 'v22.15.0')) 'Older Node version must fail.'
 Assert (-not (Test-DwbNodeVersion '')) 'Missing Node version must fail.'
 Assert (-not (Get-DwbWorkerState 'missing.js').Ready) 'Missing worker must fail.'
 foreach ($directory in @($InstallRoot, (Join-Path $WorkerRoot 'dist'), $Workspace)) { $null = New-Item -ItemType Directory -Path $directory -Force }
-foreach ($directory in @('dist','scripts','assets','docs')) { Copy-Item -LiteralPath (Join-Path $ProjectRoot $directory) -Destination $InstallRoot -Recurse }
-foreach ($file in @('package.json','package-lock.json')) { Copy-Item -LiteralPath (Join-Path $ProjectRoot $file) -Destination $InstallRoot }
+$firstSource=if($PreviousSource){[IO.Path]::GetFullPath($PreviousSource)}else{$ProjectRoot}
+$firstBuilt=Test-Path -LiteralPath (Join-Path $firstSource 'dist\index.js')
+$firstFolders=@('scripts','assets','docs')+$(if($firstBuilt){@('dist')}else{@('src')})
+foreach ($directory in $firstFolders) { Copy-Item -LiteralPath (Join-Path $firstSource $directory) -Destination $InstallRoot -Recurse }
+if(-not $firstBuilt){Copy-Item -LiteralPath (Join-Path $firstSource 'tsconfig.json') -Destination $InstallRoot}
+foreach ($file in @('package.json','package-lock.json')) { Copy-Item -LiteralPath (Join-Path $firstSource $file) -Destination $InstallRoot }
 $tunnelRoot=Join-Path $InstallRoot 'external\tunnel-client'
 $null=New-Item -ItemType Directory -Path $tunnelRoot -Force
 Add-Type -TypeDefinition 'using System; class VersionFixture { public static void Main() { Console.WriteLine("0.0.11"); } }' -OutputAssembly (Join-Path $tunnelRoot 'tunnel-client.exe') -OutputType ConsoleApplication
@@ -44,12 +49,15 @@ try {
   Assert ($saved.workspace -eq $Workspace) 'Wrong workspace saved.'
   Assert ($saved.workerCap -eq 3) 'Wrong cap saved.'
   Assert (-not (Test-Path -LiteralPath (Join-Path $InstallRoot 'node_modules\@wonderwhy-er\desktop-commander'))) 'Setup must not install Desktop Commander.'
-  Assert (-not (Test-Path -LiteralPath (Join-Path $InstallRoot 'node_modules\typescript'))) 'Built release must install production dependencies only.'
+  Assert ((Test-Path -LiteralPath (Join-Path $InstallRoot 'node_modules\typescript')) -eq (-not $firstBuilt)) 'Source installs build tools; built releases install production dependencies only.'
   Assert (([IO.File]::ReadAllText((Join-Path $WorkerRoot 'dist\config.js'))) -eq 'export const USER_HOME = os.homedir();') 'External fixture changed.'
   # Simulate extracting the next release on the same Windows account.
   $nextRoot=Join-Path $TestRoot 'next release'
   $null=New-Item -ItemType Directory -Path $nextRoot
-  foreach ($directory in @('dist','scripts','assets','docs')) { Copy-Item -LiteralPath (Join-Path $ProjectRoot $directory) -Destination $nextRoot -Recurse }
+  $nextBuilt=Test-Path -LiteralPath (Join-Path $ProjectRoot 'dist\index.js')
+  $nextFolders=@('scripts','assets','docs')+$(if($nextBuilt){@('dist')}else{@('src')})
+  foreach ($directory in $nextFolders) { Copy-Item -LiteralPath (Join-Path $ProjectRoot $directory) -Destination $nextRoot -Recurse }
+  if(-not $nextBuilt){Copy-Item -LiteralPath (Join-Path $ProjectRoot 'tsconfig.json') -Destination $nextRoot}
   foreach ($file in @('package.json','package-lock.json')) { Copy-Item -LiteralPath (Join-Path $ProjectRoot $file) -Destination $nextRoot }
   $sentinel=Join-Path $InstallRoot 'node_modules\dwb-reuse-proof.txt'
   [IO.File]::WriteAllText($sentinel,'must survive migration without npm ci',$Utf8)

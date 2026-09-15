@@ -5,7 +5,8 @@ function Assert([bool]$Value,[string]$Message) { if (-not $Value) { throw $Messa
 $root=Join-Path ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))) ('logs\tunnel-test-' + [Guid]::NewGuid().ToString('N').Substring(0,8))
 $install=Join-Path $root 'app with spaces & symbols'
 $null=New-Item -ItemType Directory -Path $install -Force
-foreach($folder in @('scripts','assets')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('..\'+$folder)) -Destination $install -Recurse }
+foreach($folder in @('scripts','assets','dist')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('..\'+$folder)) -Destination $install -Recurse }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\package.json') -Destination $install
 . (Join-Path $install 'scripts\tunnel-common.ps1')
 $paths=Get-DwbExternalPaths
 $null=New-Item -ItemType Directory -Path (Split-Path -Parent $paths.Worker) -Force

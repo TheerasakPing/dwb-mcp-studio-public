@@ -5,7 +5,7 @@
 [คู่มืออัปเดตภาษาไทย](UPDATING-TH.md)
 
 1. Click **Stop** in `DWB MCP Studio.exe` for a DWB-managed tunnel, or stop your manually configured external tunnel using its own controls. Disconnect DWB in your MCP client.
-2. Obtain the public-core broker PID using `dwb_broker_status` before disconnecting. Stop that specific broker process if it remains alive. Do not stop every Node process.
+2. Open Setup in the new release. It verifies and retires the old runtime only after work is finished; a busy or unverifiable runtime blocks the update. See [updating](UPDATING-TH.md).
 3. Keep a backup of the DWB user data directory if you need session/workspace state.
 4. Extract the new release into a new folder and run Setup there. Setup copies compatible components from the previous DWB installation into the new `external` directory, reuses a matching dependency graph, and updates worker/launcher paths. Saved workspace, custom policy, Tunnel ID and remembered key remain in the same user data directory; do not recreate the connector. When that folder already has compatible dependencies and configuration, the Dashboard opens directly. Configure regenerates the manual client entry and preserves the existing base policy.
 5. For a DWB-managed tunnel, click Start MCP. For a manually configured client, replace its old DWB entry with the new generated entry. Check the policy permits your intended workspace and reconnect.

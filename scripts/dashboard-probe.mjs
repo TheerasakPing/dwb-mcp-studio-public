@@ -88,8 +88,8 @@ export async function recentEvents(path) {
   for (const line of await tail(path)) {
     try {
       const item = JSON.parse(line);
-      const failed = item.ok === false || /failed|error|circuit_open/.test(item.type ?? '');
-      if (item.type === 'worker_heartbeat') continue;
+      const failed = item.ok === false || /failed|error|fatal|circuit_open/.test(item.type ?? '');
+      if (['worker_heartbeat', 'broker_heartbeat'].includes(item.type)) continue;
       rows.push({
         time: item.ts,
         event: redact(item.type),
@@ -108,6 +108,7 @@ export async function recentEvents(path) {
 async function main() {
   try {
     const { dataDir } = await import('../dist/paths.js');
+    const { runtimeIdentity } = await import('../dist/runtime-identity.js');
     const { brokerEndpoint } = await import('../dist/broker-protocol.js');
     let config = {};
     try {
@@ -146,6 +147,12 @@ async function main() {
     console.log(
       JSON.stringify({
         ...runtime,
+        runtimeMismatch:
+          runtime.state === 'running' &&
+          (runtime.broker?.runtime?.version !== runtimeIdentity.version ||
+            runtime.broker?.runtime?.appRoot?.toLowerCase() !==
+              runtimeIdentity.appRoot.toLowerCase()),
+        uiVersion: runtimeIdentity.version,
         events: events.slice(0, 30),
         initialWorkspace: config.workspace ?? '',
         workerCap: config.workerCap ?? null,

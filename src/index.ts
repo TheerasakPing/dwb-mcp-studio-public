@@ -26,22 +26,25 @@ async function createServer() {
   const contextOf = (ctx: any) =>
     resolveLogicalRequestContext(ctx?.mcpReq?._meta, ctx?.mcpReq?.envelope);
 
-  server.setRequestHandler('tools/list', async (_request, ctx) => broker.listTools(contextOf(ctx)));
+  server.setRequestHandler('tools/list', async (_request, ctx) =>
+    broker.listTools(contextOf(ctx), ctx.mcpReq.signal),
+  );
   server.setRequestHandler('tools/call', async (request, ctx) =>
     broker.callTool(
       request.params.name,
       (request.params.arguments ?? {}) as Record<string, unknown>,
       contextOf(ctx),
+      ctx.mcpReq.signal,
     ),
   );
   server.setRequestHandler('resources/list', async (_request, ctx) =>
-    broker.listResources(contextOf(ctx)),
+    broker.listResources(contextOf(ctx), ctx.mcpReq.signal),
   );
   server.setRequestHandler('resources/templates/list', async (_request, ctx) =>
-    broker.listResourceTemplates(contextOf(ctx)),
+    broker.listResourceTemplates(contextOf(ctx), ctx.mcpReq.signal),
   );
   server.setRequestHandler('resources/read', async (request, ctx) =>
-    broker.readResource(request.params.uri, contextOf(ctx)),
+    broker.readResource(request.params.uri, contextOf(ctx), ctx.mcpReq.signal),
   );
 
   server.onclose = () => {

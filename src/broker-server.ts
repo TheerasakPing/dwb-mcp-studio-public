@@ -1,3 +1,4 @@
+import { RequestLifetime } from './request-lifetime.js';
 import { createServer, type Socket } from 'node:net';
 import { unlink } from 'node:fs/promises';
 import {
@@ -15,9 +16,9 @@ import { WorkspaceStore } from './workspace-store.js';
 
 const endpoint = brokerEndpoint();
 const log = new EventLog();
-const coreDb = new CoreStore();
-const workspaceStore = new WorkspaceStore(coreDb);
-const registry = new SessionRegistry(log, workspaceStore);
+let coreDb: CoreStore;
+let workspaceStore: WorkspaceStore;
+let registry: SessionRegistry;
 const sockets = new Set<Socket>();
 let markReady!: () => void;
 const ready = new Promise<void>((resolve) => {
@@ -125,9 +126,14 @@ async function controlTool(
   return NOT_A_CONTROL_TOOL;
 }
 
-async function handle(ctx: ConnectionContext, message: BrokerRequest): Promise<unknown> {
+async function handle(
+  ctx: ConnectionContext,
+  message: BrokerRequest,
+  lifetime: RequestLifetime,
+): Promise<unknown> {
   await ready;
   await ctx.routingChange?.catch(() => {});
+  lifetime.check();
   if (ctx.closed || shuttingDown) throw new Error('Broker connection is closing');
   if (message.method === 'hello') {
     if (ctx.sessionId || ctx.initializing) throw new Error('Connection already initialized');
@@ -149,6 +155,12 @@ async function handle(ctx: ConnectionContext, message: BrokerRequest): Promise<u
       sessionId: ctx.sessionId,
       broker: registry.status,
     };
+  }
+  if (message.method === 'prepare_upgrade') {
+    lifetime.begin();
+    await registry.prepareUpgrade();
+    setTimeout(() => void shutdown(0), 25).unref();
+    return { shuttingDown: true, broker: registry.status };
   }
   if (message.method === 'ping') return { pong: true, broker: registry.status };
   // Local monitoring must not attach a session, allocate a worker or refresh activity.
@@ -175,22 +187,25 @@ async function handle(ctx: ConnectionContext, message: BrokerRequest): Promise<u
   if (!ctx.sessionId) throw new Error('hello must be sent before broker requests');
   const sessionId = await registry.resolveContext(ctx.sessionId, requestContext(message));
   if (message.method === 'list_tools') {
-    const upstream = await registry.listTools(sessionId);
+    const upstream = await registry.listTools(sessionId, lifetime);
     return { ...upstream, tools: [...upstream.tools, ...brokerTools] };
   }
   if (message.method === 'call_tool') {
     const params = callParams(message);
+    lifetime.check();
+    const isControl = brokerTools.some((tool) => tool.name === params.name);
+    if (isControl) lifetime.begin();
     const controlled = await controlTool(ctx, sessionId, params.name, params.arguments, message.id);
     if (controlled !== NOT_A_CONTROL_TOOL) return controlled;
-    return registry.callTool(sessionId, message.id, params);
+    return registry.callTool(sessionId, message.id, params, lifetime);
   }
-  if (message.method === 'list_resources') return registry.listResources(sessionId);
+  if (message.method === 'list_resources') return registry.listResources(sessionId, lifetime);
   if (message.method === 'list_resource_templates')
-    return registry.listResourceTemplates(sessionId);
+    return registry.listResourceTemplates(sessionId, lifetime);
   if (message.method === 'read_resource') {
     const uri = message.params?.uri;
     if (typeof uri !== 'string' || !uri) throw new Error('read_resource requires uri');
-    return registry.readResource(sessionId, uri);
+    return registry.readResource(sessionId, uri, lifetime);
   }
   if (message.method === 'shutdown') {
     if (process.env.DWB_BROKER_ALLOW_SHUTDOWN !== 'true')
@@ -210,10 +225,15 @@ function accept(socket: Socket): void {
     closed: false,
     routingChange: null,
   };
+  const requests = new Map<string, RequestLifetime>();
   let buffer = '';
   socket.setEncoding('utf8');
   socket.on('data', (chunk: string) => {
     buffer += chunk;
+    if (buffer.length > 8 * 1024 * 1024) {
+      socket.destroy();
+      return;
+    }
     while (true) {
       const newline = buffer.indexOf('\n');
       if (newline < 0) break;
@@ -235,21 +255,63 @@ function accept(socket: Socket): void {
         });
         continue;
       }
-      void handle(ctx, message)
+      if (message.method === 'cancel') {
+        requests.get(String(message.params?.requestId))?.cancel();
+        continue;
+      }
+      if (requests.has(message.id) || requests.size >= 128) {
+        response(
+          socket,
+          errorResponse(
+            message.id,
+            new Error('DWB_REQUEST_LIMIT: duplicate ID or too many pending requests'),
+          ),
+        );
+        continue;
+      }
+      const deadline =
+        typeof message.deadline === 'number' && Number.isFinite(message.deadline)
+          ? message.deadline
+          : Date.now() + 120_000;
+      const lifetime = new RequestLifetime(deadline);
+      requests.set(message.id, lifetime);
+      let replied = false;
+      const reply = (value: BrokerResponse) => {
+        if (!replied) {
+          replied = true;
+          response(socket, value);
+        }
+      };
+      lifetime.signal.addEventListener(
+        'abort',
+        () => reply(errorResponse(message.id, lifetime.error())),
+        { once: true },
+      );
+      const timer = setTimeout(
+        () => lifetime.cancel(),
+        Math.max(0, Math.min(deadline - Date.now(), 120_000)),
+      );
+      if (deadline <= Date.now()) lifetime.cancel();
+      void handle(ctx, message, lifetime)
         .then((result) =>
-          response(socket, {
+          reply({
             id: message.id,
             ok: true,
             result,
             sessionId: ctx.sessionId ?? undefined,
           }),
         )
-        .catch((error) => response(socket, errorResponse(message.id, error)));
+        .catch((error) => reply(errorResponse(message.id, error)))
+        .finally(() => {
+          clearTimeout(timer);
+          requests.delete(message.id);
+        });
     }
   });
   socket.on('close', () => {
     sockets.delete(socket);
     ctx.closed = true;
+    for (const request of requests.values()) request.cancel();
     if (ctx.sessionId) void registry.detach(ctx.sessionId).catch(() => {});
   });
   socket.on('error', () => {});
@@ -266,13 +328,13 @@ async function shutdown(code: number): Promise<void> {
   heartbeat = null;
   const closed = new Promise<void>((resolve) => server.close(() => resolve()));
   for (const socket of sockets) socket.destroy();
-  await registry.shutdown().catch(() => {});
+  await registry?.shutdown().catch(() => {});
   await log
     .write({ type: 'broker_stopped', details: { brokerPid: process.pid, endpoint } })
     .catch(() => {});
   await closed;
   try {
-    coreDb.close();
+    coreDb?.close();
   } catch {}
   if (process.platform !== 'win32') await unlink(endpoint).catch(() => {});
   process.exit(code);
@@ -296,7 +358,11 @@ async function main(): Promise<void> {
     server.once('listening', onListening);
     server.listen(endpoint);
   });
-  // Only the process that owns the endpoint may restore and rewrite session state.
+  // Claim the endpoint before opening SQLite: simultaneous cold starts must not
+  // race journal/schema initialization or rewrite the live broker's state.
+  coreDb = new CoreStore();
+  workspaceStore = new WorkspaceStore(coreDb);
+  registry = new SessionRegistry(log, workspaceStore);
   await registry.restore();
   markReady();
   await log.write({
@@ -326,6 +392,7 @@ main().catch(async (error: any) => {
   await log
     .write({
       type: 'broker_fatal',
+      ok: false,
       details: { brokerPid: process.pid, endpoint, error: String(error) },
     })
     .catch(() => {});

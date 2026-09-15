@@ -145,7 +145,7 @@ $timer.Add_Tick({
   if (Test-Path -LiteralPath $phasePath) {
     try {
       $phase = [IO.File]::ReadAllText($phasePath)
-      $messages = @{ checking='กำลังตรวจเครื่องและโฟลเดอร์งาน…'; migrating='กำลังนำส่วนประกอบจาก DWB รุ่นเดิมมาใช้…'; external='กำลังติดตั้ง Desktop Commander และ tunnel-client ลง external ของ DWB…'; installing='กำลังดาวน์โหลดส่วนประกอบ DWB จาก npm…'; building='กำลังเตรียมโปรแกรมจาก source…'; saving='กำลังบันทึกการตั้งค่า…'; verifying='กำลังตรวจการตั้งค่าครั้งสุดท้าย…' }
+      $messages = @{ runtime='กำลังตรวจและปิด broker เดิมที่จบงานแล้ว · อาจใช้เวลาประมาณ 75 วินาที…'; checking='กำลังตรวจเครื่องและโฟลเดอร์งาน…'; migrating='กำลังนำส่วนประกอบจาก DWB รุ่นเดิมมาใช้…'; external='กำลังติดตั้ง Desktop Commander และ tunnel-client ลง external ของ DWB…'; installing='กำลังดาวน์โหลดส่วนประกอบ DWB จาก npm…'; building='กำลังเตรียมโปรแกรมจาก source…'; saving='กำลังบันทึกการตั้งค่า…'; verifying='กำลังตรวจการตั้งค่าครั้งสุดท้าย…' }
       if ($messages.ContainsKey($phase)) { $resultLabel.Text = $messages[$phase] }
     } catch {}
   }

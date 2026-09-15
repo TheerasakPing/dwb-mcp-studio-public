@@ -2,7 +2,11 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const name = process.argv[2];
-if (!['setup-test', 'tunnel-test', 'external-test', 'shell-test'].includes(name))
+if (
+  !['setup-test', 'tunnel-test', 'external-test', 'shell-test', 'runtime-upgrade-test'].includes(
+    name,
+  )
+)
   throw new Error('Unknown PowerShell test');
 // npm launched from PowerShell 7 can pass its module search path into Windows
 // PowerShell 5. Let the child initialize its own compatible module paths.

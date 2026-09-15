@@ -1,9 +1,12 @@
+import { runtimeIdentity } from './runtime-identity.js';
+import { RequestLifetime } from './request-lifetime.js';
 import { randomUUID } from 'node:crypto';
 import type { CallToolRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { BrokerLogicalContext } from './broker-protocol.js';
 import { loadBrokerState, saveBrokerState, type PersistedSession } from './broker-state.js';
 import { EventLog } from './event-log.js';
 import {
+  canonicalPath,
   fingerprint,
   planTool,
   sameFingerprint,
@@ -61,6 +64,7 @@ export class SessionRegistry {
   private startingWorkers = 0;
   private stoppingWorkers = 0;
   private shuttingDown = false;
+  private quiescing = false;
   private readonly workerCap = Math.max(1, envInt('DWB_WORKER_CAP', 4));
   private readonly detachGraceMs = envInt('DWB_DETACH_GRACE_MS', 5 * 60_000);
   private readonly idleWorkerMs = Math.max(250, envInt('DWB_IDLE_WORKER_MS', 60_000));
@@ -69,6 +73,7 @@ export class SessionRegistry {
     envInt('DWB_BROKER_RESTORE_MAX_AGE_MS', 30 * 60_000),
   );
   private stateWriteChain: Promise<void> = Promise.resolve();
+  private persistenceError: string | null = null;
   private idleReclaim: Promise<number> | null = null;
 
   constructor(
@@ -81,6 +86,8 @@ export class SessionRegistry {
   get status() {
     const all = [...this.sessions.values()];
     return {
+      persistence: { healthy: this.persistenceError === null, error: this.persistenceError },
+      runtime: runtimeIdentity,
       brokerPid: process.pid,
       workerCap: this.workerCap,
       sessions: all.length,
@@ -96,7 +103,8 @@ export class SessionRegistry {
   }
 
   private require(id: string): Session {
-    if (this.shuttingDown) throw new Error('Broker shutting down');
+    if (this.shuttingDown || this.quiescing)
+      throw new Error('Broker shutting down or preparing an upgrade');
     const session = this.sessions.get(id);
     if (!session) throw new Error(`Unknown MCP session: ${id}`);
     return session;
@@ -105,6 +113,7 @@ export class SessionRegistry {
   private view(session: Session) {
     return {
       sessionId: session.id,
+      persistence: { healthy: this.persistenceError === null, error: this.persistenceError },
       state: session.state,
       workspaceKey: session.workspaceKey,
       transportWorkspaceKey: session.transportWorkspaceKey,
@@ -159,8 +168,21 @@ export class SessionRegistry {
   private persistState(): Promise<void> {
     const snapshot = this.persistedSessions();
     this.stateWriteChain = this.stateWriteChain
-      .then(() => saveBrokerState(snapshot))
-      .catch(() => {});
+      .then(async () => {
+        await saveBrokerState(snapshot);
+        this.persistenceError = null;
+      })
+      .catch(async (error) => {
+        this.persistenceError =
+          'DWB_STATE_SAVE_FAILED: session continuity is not saved. Check the data folder and free disk space.';
+        await this.log
+          .write({
+            type: 'broker_state_save_failed',
+            ok: false,
+            details: { error: this.persistenceError, code: (error as any)?.code ?? 'UNKNOWN' },
+          })
+          .catch(() => {});
+      });
     return this.stateWriteChain;
   }
 
@@ -188,7 +210,15 @@ export class SessionRegistry {
         retirement: null,
         restarting: false,
         changingWorkspace: false,
-        observations: new Map(saved.observations ?? []),
+        observations: new Map(
+          (saved.observations ?? []).flatMap(([path, value]): Array<[string, FileFingerprint]> => {
+            try {
+              return [[canonicalPath(path, saved.workspaceKey) ?? path, value]];
+            } catch {
+              return [];
+            } // An offline drive must not discard other saved sessions.
+          }),
+        ),
         createdAt: saved.createdAt || now,
         lastActivityAt: saved.lastActivityAt || now,
         detachedAt: saved.detachedAt || now,
@@ -510,7 +540,12 @@ export class SessionRegistry {
       }
       const result = workspace ? { workspace: store.bindKnown(id, workspace) } : store.unbind(id);
       await this.persistState();
-      return { ...result, workingDirectory: directory, workerReady: !!session.worker };
+      return {
+        ...result,
+        workingDirectory: directory,
+        workerReady: !!session.worker,
+        persistence: this.status.persistence,
+      };
     } finally {
       session.changingWorkspace = false;
       session.inFlight--;
@@ -691,6 +726,7 @@ export class SessionRegistry {
 
   private async allocateWorker(session: Session): Promise<WorkerAllocation> {
     if (session.retirement) await session.retirement;
+    if (!session.inFlight) throw new Error('No requests remain for this worker allocation');
     const queueMs = await this.waitForWorker(session);
     try {
       this.assertAttached(session);
@@ -713,10 +749,21 @@ export class SessionRegistry {
     return session.allocationPromise;
   }
 
+  private cancelEmptyAllocation(session: Session, lifetime: RequestLifetime): void {
+    if (session.inFlight) return;
+    const index = this.queue.findIndex((item) => item.sessionId === session.id);
+    if (index < 0) return;
+    const [item] = this.queue.splice(index, 1);
+    session.queuedAt = null;
+    item.reject(lifetime.error());
+  }
+
   private async withWorker<T>(
     id: string,
     action: (worker: WorkerSupervisor) => Promise<T>,
+    lifetime = new RequestLifetime(),
   ): Promise<T> {
+    lifetime.check();
     const session = this.require(id);
     if (session.changingWorkspace)
       throw new Error('Workspace is changing; retry when binding finishes');
@@ -724,29 +771,31 @@ export class SessionRegistry {
     session.lastActivityAt = new Date().toISOString();
     session.inFlight++;
     try {
-      const { worker } = await this.ensureWorker(session);
+      const { worker } = await lifetime.wait(this.ensureWorker(session));
+      lifetime.begin();
       return await action(worker);
     } finally {
       session.inFlight--;
+      this.cancelEmptyAllocation(session, lifetime);
       session.lastActivityAt = new Date().toISOString();
       void this.reclaimForQueue().catch(() => {});
     }
   }
 
-  async listTools(id: string) {
-    return this.withWorker(id, (worker) => worker.listTools());
+  async listTools(id: string, lifetime?: RequestLifetime) {
+    return this.withWorker(id, (worker) => worker.listTools(), lifetime);
   }
 
-  async listResources(id: string) {
-    return this.withWorker(id, (worker) => worker.listResources());
+  async listResources(id: string, lifetime?: RequestLifetime) {
+    return this.withWorker(id, (worker) => worker.listResources(), lifetime);
   }
 
-  async listResourceTemplates(id: string) {
-    return this.withWorker(id, (worker) => worker.listResourceTemplates());
+  async listResourceTemplates(id: string, lifetime?: RequestLifetime) {
+    return this.withWorker(id, (worker) => worker.listResourceTemplates(), lifetime);
   }
 
-  async readResource(id: string, uri: string) {
-    return this.withWorker(id, (worker) => worker.readResource(uri));
+  async readResource(id: string, uri: string, lifetime?: RequestLifetime) {
+    return this.withWorker(id, (worker) => worker.readResource(uri), lifetime);
   }
 
   async restartWorker(id: string): Promise<unknown> {
@@ -757,6 +806,9 @@ export class SessionRegistry {
     session.inFlight++;
     try {
       const { worker } = await this.ensureWorker(session);
+      if (await worker.hasActiveWork().catch(() => true))
+        throw new Error('Worker has active processes or searches; finish them before restarting');
+      this.assertAttached(session);
       await worker.restart('manual_tool');
     } finally {
       session.restarting = false;
@@ -804,7 +856,13 @@ export class SessionRegistry {
     return { content: [{ type: 'text', text }], isError: true };
   }
 
-  async callTool(id: string, requestId: string, params: CallToolRequest['params']) {
+  async callTool(
+    id: string,
+    requestId: string,
+    params: CallToolRequest['params'],
+    lifetime = new RequestLifetime(),
+  ) {
+    lifetime.check();
     const session = this.require(id);
     if (session.changingWorkspace)
       throw new Error('Workspace is changing; retry when binding finishes');
@@ -836,11 +894,25 @@ export class SessionRegistry {
         });
         return { content: [{ type: 'text', text: gate.message }], isError: true };
       }
-      const allocation = await this.ensureWorker(session);
+      const allocation = await lifetime.wait(this.ensureWorker(session));
       queueMs = allocation.queueMs;
       const mode = plan.kind === 'read' ? 'read' : 'write';
-      lease = await this.locks.acquire(plan.locks, `${id}:${requestId}`, mode);
+      lease = await this.locks.acquire(plan.locks, `${id}:${requestId}`, mode, lifetime.signal);
+      // A queued call may have waited while a directory junction changed.
+      const currentPlan = planTool(params.name, args, this.workingDirectory(session));
+      if (JSON.stringify(currentPlan) !== JSON.stringify(plan))
+        throw new Error(
+          'DWB_PATH_CHANGED: path changed while waiting; inspect the path before retrying',
+        );
+      const currentGate = this.workspaceStore?.mutationGate({
+        sessionId: id,
+        kind: plan.kind,
+        paths: mutationPaths,
+      });
+      if (currentGate && !currentGate.allowed)
+        return { content: [{ type: 'text', text: currentGate.message }], isError: true };
       if (plan.mutate.length) await this.assertFresh(session, plan.mutate);
+      lifetime.begin();
       const result = await allocation.worker.callTool(params, {
         requestId,
         queueMs,
@@ -848,6 +920,14 @@ export class SessionRegistry {
       });
       if (!(result as any)?.isError) {
         await this.refreshObservations(session, [...plan.observe, ...plan.mutate]);
+      }
+      if (this.persistenceError && Array.isArray((result as any).content)) {
+        (result as any).content.push({
+          type: 'text',
+          text:
+            this.persistenceError +
+            ' The tool result above is valid; do not repeat a completed mutation.',
+        });
       }
       return result;
     } catch (error) {
@@ -882,6 +962,7 @@ export class SessionRegistry {
     } finally {
       lease?.release();
       session.inFlight = Math.max(0, session.inFlight - 1);
+      this.cancelEmptyAllocation(session, lifetime);
       session.lastActivityAt = new Date().toISOString();
       void this.reclaimForQueue().catch(() => {});
     }
@@ -944,6 +1025,29 @@ export class SessionRegistry {
       target.inFlight--;
       current.changingWorkspace = false;
       target.changingWorkspace = false;
+    }
+  }
+
+  async prepareUpgrade(): Promise<void> {
+    if (this.quiescing || this.shuttingDown) throw new Error('Broker is already stopping');
+    this.quiescing = true;
+    try {
+      const busy = () =>
+        this.status.inFlightCalls ||
+        this.status.queueDepth ||
+        this.startingWorkers ||
+        this.stoppingWorkers;
+      if (busy()) throw new Error('DWB_UPGRADE_BUSY: finish current requests before updating');
+      for (const session of this.sessions.values()) {
+        if (session.worker && (await session.worker.hasActiveWork().catch(() => true)))
+          throw new Error('DWB_UPGRADE_BUSY: finish background processes/searches before updating');
+      }
+      if (busy()) throw new Error('DWB_UPGRADE_BUSY: wait for worker retirement before updating');
+      await this.persistState();
+      if (this.persistenceError) throw new Error(this.persistenceError);
+    } catch (error) {
+      this.quiescing = false;
+      throw error;
     }
   }
 

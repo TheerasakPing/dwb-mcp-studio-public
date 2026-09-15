@@ -42,6 +42,7 @@ export class WorkerSupervisor {
   private restartPromise: Promise<Client> | null = null;
   private heartbeat: NodeJS.Timeout | null = null;
   private stopped = false;
+  private inFlightTools = 0;
   private lastHealthyAt: string | null = null;
   private lastRestartReason: string | null = null;
   private restartCount = 0;
@@ -126,6 +127,10 @@ export class WorkerSupervisor {
   }
 
   async restart(reason: string): Promise<Client> {
+    if (this.inFlightTools)
+      throw new Error(
+        'Worker has dispatched tool calls; wait for their actual results before restarting',
+      );
     if (this.restartPromise) return this.restartPromise;
     this.restartPromise = this.recover(reason).finally(() => {
       this.restartPromise = null;
@@ -340,8 +345,11 @@ export class WorkerSupervisor {
   ) {
     const client = await this.getClient();
     const started = performance.now();
+    this.inFlightTools++;
     try {
-      const result = await client.callTool(params);
+      // The broker owns the caller deadline. Do not let the SDK's default
+      // 60-second timer discard a still-running result and release its locks.
+      const result = await client.callTool(params, undefined, { timeout: 2_147_483_647 });
       const durationMs = Math.round(performance.now() - started);
       const application = await this.payloadGuard.apply(
         params.name,
@@ -349,48 +357,55 @@ export class WorkerSupervisor {
         result,
       );
       this.lastHealthyAt = new Date().toISOString();
-      await this.log.write({
-        type: 'tool_call',
-        workerPid: this.transport?.pid ?? null,
-        tool: params.name,
-        durationMs,
-        bytes: application.originalBytes,
-        ok: !result.isError,
-        sessionId: this.context.sessionId,
-        requestId: meta.requestId,
-        workerId: this.context.workerId,
-        workspaceKey: this.context.workspaceKey,
-        queueMs: meta.queueMs,
-        lockWaitMs: meta.lockWaitMs,
-        details: {
-          forwardedBytes: application.forwardedBytes,
-          guarded: application.guarded,
-          archivePath: application.archivePath,
-        },
-      });
+      await this.log
+        .write({
+          type: 'tool_call',
+          workerPid: this.transport?.pid ?? null,
+          tool: params.name,
+          durationMs,
+          bytes: application.originalBytes,
+          ok: !result.isError,
+          sessionId: this.context.sessionId,
+          requestId: meta.requestId,
+          workerId: this.context.workerId,
+          workspaceKey: this.context.workspaceKey,
+          queueMs: meta.queueMs,
+          lockWaitMs: meta.lockWaitMs,
+          details: {
+            forwardedBytes: application.forwardedBytes,
+            guarded: application.guarded,
+            archivePath: application.archivePath,
+          },
+        })
+        .catch(() => {});
       return application.result;
     } catch (error) {
-      await this.log.write({
-        type: 'tool_call',
-        workerPid: this.transport?.pid ?? null,
-        tool: params.name,
-        durationMs: Math.round(performance.now() - started),
-        ok: false,
-        sessionId: this.context.sessionId,
-        requestId: meta.requestId,
-        workerId: this.context.workerId,
-        workspaceKey: this.context.workspaceKey,
-        queueMs: meta.queueMs,
-        lockWaitMs: meta.lockWaitMs,
-        details: { error: String(error) },
-      });
-      try {
-        await this.restart(`tool_call_failed:${params.name}`);
-      } catch {}
-      throw error;
+      await this.log
+        .write({
+          type: 'tool_call',
+          workerPid: this.transport?.pid ?? null,
+          tool: params.name,
+          durationMs: Math.round(performance.now() - started),
+          ok: false,
+          sessionId: this.context.sessionId,
+          requestId: meta.requestId,
+          workerId: this.context.workerId,
+          workspaceKey: this.context.workspaceKey,
+          queueMs: meta.queueMs,
+          lockWaitMs: meta.lockWaitMs,
+          details: { error: String(error) },
+        })
+        .catch(() => {});
+      throw new Error(
+        'DWB_OUTCOME_UNKNOWN: upstream call failed; inspect files/processes before retrying. ' +
+          String(error),
+      );
+    } finally {
+      this.inFlightTools--;
     }
   }
   async hasActiveWork(): Promise<boolean> {
+    if (this.inFlightTools) return true;
     const client = await this.getClient();
     const textOf = (result: any) =>
       Array.isArray(result?.content)
@@ -419,7 +434,7 @@ export class WorkerSupervisor {
   }
 
   private async probe(): Promise<void> {
-    if (this.stopped) return;
+    if (this.stopped || this.inFlightTools) return;
     try {
       const client = await this.getClient();
       await client.listTools(undefined, { timeout: 4_000 });

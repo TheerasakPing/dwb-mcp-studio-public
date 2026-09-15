@@ -34,7 +34,10 @@ export async function loadBrokerState(path = brokerStatePath): Promise<BrokerSta
     return parsed;
   } catch (error: any) {
     if (error?.code !== 'ENOENT') {
-      // Corrupt or incompatible state must not block Broker startup.
+      throw new Error(
+        'DWB_STATE_LOAD_FAILED: saved sessions could not be read; preserve and repair broker-state.json before restarting.',
+        { cause: error },
+      );
     }
     return { version: 1, updatedAt: new Date(0).toISOString(), sessions: [] };
   }

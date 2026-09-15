@@ -95,3 +95,13 @@ A new installation/data directory on the development machine is not a fresh Wind
 - WPF shell tests verify close/minimize to notification area, restore, duplicate launch signaling through the real EXE, explicit Windows taskbar AppUserModelID and page transition.
 - Real WPF navigation test exercises Dashboard → Tunnel settings → Dashboard → machine settings → Dashboard, hide/restore in each page, and control-window exit in a single host process. Uses an isolated data directory without starting MCP.
 - Exit from the tray stops only the UI and its short-lived status probe; the tunnel/broker lifecycle is unchanged. Windows controls whether the notification icon appears directly or under the overflow arrow.
+
+## beta.13 — pre-publish hardening
+
+- `npm test` includes case/junction locks, workspace transaction rollback, background-work restart guards, queue cancellation, dispatched-work lock retention, persistence failure/recovery and actual broker wire deadlines.
+- `npm run test:runtime-upgrade` checks legacy process ownership and retirement, busy runtime rejection and unchanged configuration.
+- `npm run test:integration` runs the eight suites against a separately installed Desktop Commander.
+- Setup, tunnel, external dependency, upgrade and shell tests run in Windows CI. ZIP validation runs the Setup flow from extracted release files.
+- `scripts/release-test.ps1 -Zip <zip> -PreviousZip <beta9.zip>,<beta11.zip>` tests a fresh extracted package and settings-preserving upgrades with isolated data and owned dependency fixtures. Source ZIPs also exercise the initial automatic build. These are tests on the current Windows account, not proof of a clean OS or hosted OpenAI authentication.
+
+Behavior and limits: [core reliability](CORE-RELIABILITY.md).
