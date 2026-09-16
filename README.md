@@ -16,9 +16,7 @@ Setup เตรียมโปรแกรมจาก source ให้เอง
 
 ตัวกลาง MCP สำหรับใช้ **Desktop Commander หลาย worker** พร้อมระบบกู้การเชื่อมต่อและป้องกันการเขียนไฟล์ทับข้าม session
 
-รุ่นนี้แจกเฉพาะ core ของ DWB ไม่มีหน้า Studio/Chat Library, Work/Skills, YT Studio, YouTube Research หรือโมดูลส่วนตัว
-
-**ขอบเขตฟีเจอร์คงที่:** เน้น Desktop Commander หลาย worker, session, คิว, recovery และการป้องกันไฟล์ รุ่นถัดจากนี้เน้นแก้ความถูกต้อง ความเสถียร และความสะดวกในการใช้งาน ยังไม่เพิ่ม MCP provider หรือโมดูลใหม่
+ใช้ Setup เตรียมเครื่องและการเชื่อมต่อ ตั้งชื่อ workspace เพื่อเรียกใช้ในแชทถัดไป และดูสถานะ worker กับงานที่กำลังทำผ่าน Dashboard
 
 ### ปรับปรุงใน beta.14
 
@@ -203,7 +201,7 @@ path ในตัวอย่างต้องเปลี่ยนเป็น
 
 ## ข้อมูลและขอบเขต
 
-- เก็บข้อมูลใน `%LOCALAPPDATA%\DWB-MCP-Studio` แยกจากโฟลเดอร์โปรแกรม และแยกจาก DWB Desktop Bridge รุ่นส่วนตัว
+- เก็บข้อมูลใน `%LOCALAPPDATA%\DWB-MCP-Studio` แยกจากโฟลเดอร์โปรแกรม เพื่อเก็บการตั้งค่าและ workspace ไว้เมื่ออัปเดต
 - ไม่มีการนำเข้าแชต ประวัติ Desktop Commander หรือ config ส่วนตัวโดยอัตโนมัติ
 - `base-policy.json` ที่ Setup สร้างอนุญาตโฟลเดอร์งานที่เลือก ปรับเพิ่มโฟลเดอร์ได้เอง แล้วเริ่ม broker ใหม่
 - แต่ละ worker มี config home ของตัวเอง โดยไม่เปลี่ยน OS home ที่ Git/SSH และคำสั่งอื่นใช้ และไม่ patch ไฟล์ Desktop Commander บน disk

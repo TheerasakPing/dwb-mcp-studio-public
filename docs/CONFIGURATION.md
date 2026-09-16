@@ -69,6 +69,6 @@ Generated user files are never part of a release. Re-running Configure preserves
 | `DWB_BROKER_AUTOSTART`                                                 | `true`; set `false` only when managing broker startup yourself                   |
 | `DWB_BROKER_PIPE`                                                      | Advanced override; default has a public-core prefix plus a user/data-root hash   |
 
-All adapters sharing one data root use the first broker's worker configuration until it exits. Configure all clients consistently. Do not point public-core adapters at the private bridge's pipe. Use a different data directory when running independent versions side by side.
+All adapters sharing one data root use the first broker's worker configuration until it exits. Configure all clients consistently. Use a different data directory and broker endpoint when running independent installations side by side.
 
 `doctor` validates files, config and supported worker version/layout; it does not prove a remote tunnel connection works. This beta does not accept arbitrary MCP implementations as worker replacements: locking and active-work detection are Desktop Commander specific.
