@@ -1,13 +1,15 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'setup-common.ps1')
 $root=Split-Path -Parent $PSScriptRoot
 $testRoot=Join-Path $root ('logs\shell-'+[Guid]::NewGuid().ToString('N'))
 $null=New-Item -ItemType Directory -Path $testRoot -Force
 $env:DWB_DATA_DIR=Join-Path $testRoot 'data'
 $env:DWB_CONFIG_FILE=Join-Path $env:DWB_DATA_DIR 'config.json'
-foreach($mode in @('TestReport','UiTestReport')){
+foreach($mode in @('TestReport','UiTestReport','Startup')){
   $report=Join-Path $testRoot ($mode+'.txt')
-  $arguments='-NoProfile -STA -ExecutionPolicy Bypass -File '+(ConvertTo-DwbArgument (Join-Path $PSScriptRoot 'app.ps1'))+' -'+$mode+' '+(ConvertTo-DwbArgument $report)
+  $testSwitch=if($mode -eq 'Startup'){'UiTestReport'}else{$mode}
+  $extra=if($mode -eq 'Startup'){' -Startup'}else{''}
+  $arguments='-NoProfile -STA -ExecutionPolicy Bypass -File '+(ConvertTo-DwbArgument (Join-Path $PSScriptRoot 'app.ps1'))+' -'+$testSwitch+' '+(ConvertTo-DwbArgument $report)+$extra
   $process=Start-Process powershell.exe -ArgumentList $arguments -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $testRoot ($mode+'.out')) -RedirectStandardError (Join-Path $testRoot ($mode+'.err'))
   $null=$process.Handle
   if(-not $process.WaitForExit(60000)){

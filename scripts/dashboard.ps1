@@ -91,6 +91,8 @@ function Finish-Probe{
   }catch{Apply-Snapshot ([pscustomobject]@{state='unresponsive';sessions=@();events=@();updatedAt=[DateTime]::UtcNow})}
   finally{$script:Probe.Dispose();$script:Probe=$null}
 }
+(Find 'AppPreferences').Add_Click({if(Get-Command Show-DwbPreferences -ErrorAction SilentlyContinue){Show-DwbPreferences}})
+(Find 'AppPreferences').IsEnabled=[bool]$global:DwbShell
 (Find 'Connection').Add_Click({Open-DwbScreen 'tunnel-setup.ps1'})
 (Find 'MachineSetup').Add_Click({Open-DwbScreen 'setup.ps1' '-ConfigureOnly'})
 (Find 'WorkspaceHelp').Add_Click({$info=New-Object Diagnostics.ProcessStartInfo;$info.FileName=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\docs\workspaces.html'));$info.UseShellExecute=$true;[Diagnostics.Process]::Start($info)|Out-Null})

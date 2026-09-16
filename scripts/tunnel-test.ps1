@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
 . (Join-Path $PSScriptRoot 'tunnel-common.ps1')
 function Assert([bool]$Value,[string]$Message) { if (-not $Value) { throw $Message } }
@@ -102,6 +102,16 @@ try {
   Assert ($second -ne $first) 'Restart did not create a new process.'
   Assert (-not (Test-Path -LiteralPath (Join-Path (Get-DwbTunnelDirectory) 'key.dpapi'))) 'Opt out failed to remove saved key.'
   Stop-DwbTunnel
+  # Simulate a Windows-login launch using an owned loopback tunnel and saved DPAPI key.
+  [IO.File]::WriteAllText((Join-Path (Get-DwbTunnelDirectory) 'key.dpapi'),(ConvertFrom-SecureString $key))
+  Write-DwbTunnelJson 'settings.json' @{tunnelId='tunnel_startup_test';rememberKey=$true}
+  [IO.File]::WriteAllText((Join-Path $env:DWB_DATA_DIR 'preferences.json'),'{"startWithWindows":true,"connectOnStartup":true,"closeAction":"tray","minimizeToTray":true}')
+  $startupReport=Join-Path $root 'startup-ui.txt'
+  & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File (Join-Path $install 'scripts\app.ps1') -UiTestReport $startupReport -Startup
+  Assert ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $startupReport)) 'Startup shell failed.'
+  Assert (Get-DwbTunnelStatus).ready 'Startup did not connect using the saved key.'
+  Stop-DwbTunnel
+  Write-Output 'STARTUP_MCP_PASS: simulated login, saved DPAPI key, hidden dashboard, ready loopback tunnel.'
   # Execute the real wrapper beside a fixture start.mjs to verify credential removal.
   $wrapperRoot=Join-Path $root 'wrapper'
   $null=New-Item -ItemType Directory -Path $wrapperRoot

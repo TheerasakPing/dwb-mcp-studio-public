@@ -74,8 +74,10 @@ try {
   $saved.basePolicy=$customPolicy
   $saved | Add-Member -NotePropertyName customOption -NotePropertyValue 'preserve me'
   [IO.File]::WriteAllText($env:DWB_CONFIG_FILE,($saved | ConvertTo-Json),$Utf8)
+  $preferencesFile=Join-Path $env:DWB_DATA_DIR 'preferences.json'
+  [IO.File]::WriteAllText($preferencesFile,'{"startWithWindows":false,"connectOnStartup":false,"closeAction":"exit","minimizeToTray":false}',$Utf8)
   $preserved=@{}
-  foreach ($file in @($keyFile,$settingsFile,$workspaceDb,$customPolicy)) { $preserved[$file]=(Get-FileHash -LiteralPath $file).Hash }
+  foreach ($file in @($keyFile,$settingsFile,$workspaceDb,$customPolicy,$preferencesFile)) { $preserved[$file]=(Get-FileHash -LiteralPath $file).Hash }
   & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File (Join-Path $nextRoot 'scripts\setup.ps1') -TestRequestFile $requestFile -PreviewPath (Join-Path $TestRoot 'upgrade-success.png')
   Assert ($LASTEXITCODE -eq 0) 'Upgrade GUI failed.'
   foreach ($file in $preserved.Keys) { Assert ((Get-FileHash -LiteralPath $file).Hash -eq $preserved[$file]) 'Saved user data changed during upgrade.' }

@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$RequestFile)
+﻿param([Parameter(Mandatory=$true)][string]$RequestFile)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'setup-common.ps1')
 . (Join-Path $PSScriptRoot 'external-common.ps1')
@@ -65,6 +65,8 @@ try {
   Invoke-DwbNode $machine.Node @((Join-Path $PSScriptRoot 'upgrade.mjs'), 'mark') $ProjectRoot | Write-Output
   $result = @{ ok = $true; configFile = $doctor.configFile; clientConfig = (Join-Path (Split-Path -Parent $doctor.configFile) 'mcp-client.json'); workerCap = $cap }
   [IO.File]::WriteAllText($ResultFile, ($result | ConvertTo-Json -Depth 5), $Utf8)
+  . (Join-Path $PSScriptRoot 'preferences-common.ps1')
+  if((Get-DwbPreferences).startWithWindows){Set-DwbWindowsStartup $true}
   Set-Phase 'complete'
 } catch {
   if ($saving) {

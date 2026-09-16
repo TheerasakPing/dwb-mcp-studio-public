@@ -1,6 +1,6 @@
 {
   "name": "dwb-mcp-studio-core",
-  "version": "0.1.0-beta.13",
+  "version": "0.1.0-beta.14",
   "private": true,
   "description": "Local multi-worker MCP broker for a separately installed Desktop Commander",
   "type": "module",
@@ -46,7 +46,9 @@
     "scripts/launcher.cs",
     "scripts/build-launcher.ps1",
     "scripts/runtime-control.mjs",
-    "scripts/runtime-upgrade.ps1"
+    "scripts/runtime-upgrade.ps1",
+    "scripts/preferences-common.ps1",
+    "scripts/preferences-ui.ps1"
   ],
   "scripts": {
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.json",
@@ -65,7 +67,8 @@
     "test:upgrade": "node scripts/upgrade-test.mjs",
     "build:launcher": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-launcher.ps1",
     "test:shell": "node scripts/test-powershell.mjs shell-test",
-    "test:runtime-upgrade": "node scripts/test-powershell.mjs runtime-upgrade-test"
+    "test:runtime-upgrade": "node scripts/test-powershell.mjs runtime-upgrade-test",
+    "test:preferences": "node scripts/test-powershell.mjs preferences-test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",

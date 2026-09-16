@@ -3,9 +3,14 @@ import { fileURLToPath } from 'node:url';
 
 const name = process.argv[2];
 if (
-  !['setup-test', 'tunnel-test', 'external-test', 'shell-test', 'runtime-upgrade-test'].includes(
-    name,
-  )
+  ![
+    'setup-test',
+    'tunnel-test',
+    'external-test',
+    'shell-test',
+    'runtime-upgrade-test',
+    'preferences-test',
+  ].includes(name)
 )
   throw new Error('Unknown PowerShell test');
 // npm launched from PowerShell 7 can pass its module search path into Windows

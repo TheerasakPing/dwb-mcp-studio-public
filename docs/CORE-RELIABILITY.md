@@ -24,4 +24,4 @@ An unreadable or corrupt `broker-state.json` stops broker startup and is preserv
 
 Manual worker restart rejects active requests, processes and searches. A failed activity probe is treated as busy. Setup uses the same conservative rule when retiring a runtime, and refuses to update if it cannot save continuity first. The dashboard displays the version actually running in the broker.
 
-See [updating with existing settings](UPDATING-TH.md). Closing the dashboard or minimizing it still hides it to the tray; it does not stop MCP.
+See [updating with existing settings](UPDATING-TH.md). Closing or minimizing hides to tray by default. In beta.14 App preferences can change close to exit and stop MCP, guarded against active work, or minimize normally to the taskbar.
