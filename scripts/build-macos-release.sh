@@ -1,4 +1,5 @@
 #!/bin/bash
+# Keep this file LF-only; macOS /bin/bash rejects CRLF shell options.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
