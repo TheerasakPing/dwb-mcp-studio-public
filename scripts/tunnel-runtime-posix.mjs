@@ -294,22 +294,28 @@ async function start(tunnelId) {
       runId,
       startedAt: new Date().toISOString(),
     };
-    await writeFile(stateFile, JSON.stringify(state, null, 2) + '\n', {
-      mode: 0o600,
-    });
+    try {
+      await writeFile(stateFile, JSON.stringify(state, null, 2) + '\n', {
+        flag: 'wx',
+        mode: 0o600,
+      });
 
-    const identity = await verifiedProcess(state);
-    if (!identity) {
+      const identity = await verifiedProcess(state);
+      if (!identity)
+        throw new Error('tunnel-client started but process ownership could not be verified.');
+    } catch (error) {
       try {
         process.kill(-state.pgid, 'SIGKILL');
       } catch {}
       await unlink(stateFile).catch(() => {});
-      throw new Error('tunnel-client started but process ownership could not be verified.');
+      await rm(profileFile, { force: true }).catch(() => {});
+      await rm(healthFile, { force: true }).catch(() => {});
+      throw error;
     }
 
     return { started: true, pid: state.pid, tunnelId, profileFile, healthFile, logFile };
   } finally {
-    process.env[runtimeKeyName] = '';
+    delete process.env[runtimeKeyName];
     await release();
   }
 }
