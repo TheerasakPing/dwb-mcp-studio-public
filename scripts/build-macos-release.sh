@@ -125,7 +125,21 @@ DMG_ROOT="$(mktemp -d)"
 trap 'rm -rf "$DMG_ROOT"' EXIT
 cp -R "$APP" "$DMG_ROOT/$PRODUCT.app"
 ln -s /Applications "$DMG_ROOT/Applications"
-hdiutil create   -volname "$PRODUCT"   -srcfolder "$DMG_ROOT"   -ov   -format UDZO   "$DMG" >/dev/null
+DMG_CREATED=0
+for attempt in 1 2 3; do
+  rm -f "$DMG"
+  if hdiutil create -volname "$PRODUCT" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG" >/dev/null; then
+    DMG_CREATED=1
+    break
+  fi
+  echo "hdiutil create failed on attempt $attempt; retrying..." >&2
+  sync
+  sleep 5
+done
+if [[ "$DMG_CREATED" != "1" ]]; then
+  echo "Could not create DMG after 3 attempts." >&2
+  exit 1
+fi
 
 (
   cd "$OUT"
