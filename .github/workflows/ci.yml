@@ -23,6 +23,8 @@ jobs:
       - run: npm run external:install-tunnel
       - run: npm run external:status
       - run: npm run test:integration
+      - name: Test native macOS platform layer
+        run: swift test --package-path macos/DWBPlatform
 
   verify:
     runs-on: windows-latest
