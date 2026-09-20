@@ -26,9 +26,18 @@ try {
   await Promise.all(clients.map((client) => client.listTools()));
   await first.callTool('workspace', { action: 'bind', path: a });
   await second.callTool('workspace', { action: 'bind', path: b });
+  const shell =
+    process.platform === 'win32'
+      ? {
+          command: '[Console]::WriteLine((Get-Location).Path)',
+          shell: 'powershell.exe',
+        }
+      : {
+          command: 'pwd',
+          shell: '/bin/zsh',
+        };
   const result = await first.callTool('start_process', {
-    command: '[Console]::WriteLine((Get-Location).Path)',
-    shell: 'powershell.exe',
+    ...shell,
     timeout_ms: 3000,
   });
   assert.notEqual(result.isError, true, JSON.stringify(result));
