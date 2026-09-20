@@ -68,7 +68,8 @@
     "build:launcher": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-launcher.ps1",
     "test:shell": "node scripts/test-powershell.mjs shell-test",
     "test:runtime-upgrade": "node scripts/test-powershell.mjs runtime-upgrade-test",
-    "test:preferences": "node scripts/test-powershell.mjs preferences-test"
+    "test:preferences": "node scripts/test-powershell.mjs preferences-test",
+    "project:macos": "node scripts/bootstrap-macos-project.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
