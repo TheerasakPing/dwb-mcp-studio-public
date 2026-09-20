@@ -29,6 +29,8 @@ final class AppModel: ObservableObject {
     @Published var tunnelStatus = "Unknown"
     @Published var output = ""
     @Published var isBusy = false
+    @Published var workspacePath = ""
+    @Published var workerCap = 4
 
     let keychain = KeychainStore()
     let bridge: NodeBridge?
@@ -68,17 +70,58 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func chooseWorkspace() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose DWB Workspace"
+        panel.prompt = "Choose"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let url = panel.url {
+            workspacePath = url.path
+        }
+    }
+
     func installMachine() async {
         guard let bridge else {
             output = bridgeError ?? "Node bridge is unavailable."
             return
         }
+        let workspace = workspacePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !workspace.isEmpty else {
+            output = "Choose a workspace folder before installing."
+            return
+        }
+
         await perform {
-            let result = try await bridge.run(
+            let installed = try await bridge.run(
                 script: "scripts/external.mjs",
                 arguments: ["install"]
             )
-            self.output = result.stdout
+            guard let data = installed.stdout.data(using: .utf8),
+                  let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let worker = object["worker"] as? [String: Any],
+                  let workerEntry = worker["entry"] as? String,
+                  !workerEntry.isEmpty
+            else {
+                throw NodeBridgeError.commandFailed(-1, "Managed Desktop Commander entry was not returned by Setup.")
+            }
+
+            let configured = try await bridge.run(
+                script: "scripts/configure.mjs",
+                arguments: [
+                    "--worker-entry", workerEntry,
+                    "--workspace", workspace,
+                    "--worker-cap", String(self.workerCap)
+                ]
+            )
+            let doctor = try await bridge.run(script: "scripts/doctor.mjs")
+            self.output = [
+                installed.stdout,
+                configured.stdout,
+                doctor.stdout
+            ].filter { !$0.isEmpty }.joined(separator: "\n\n")
         }
     }
 
@@ -252,14 +295,25 @@ struct SetupView: View {
                 LabeledContent("DWB root", value: model.appRoot)
             }
 
+            Section("Workspace") {
+                HStack {
+                    TextField("Workspace folder", text: $model.workspacePath)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Choose…") {
+                        model.chooseWorkspace()
+                    }
+                }
+                Stepper("Maximum workers: \(model.workerCap)", value: $model.workerCap, in: 1...64)
+            }
+
             Section("Managed dependencies") {
-                Text("Installs Desktop Commander 0.2.50 and the pinned native tunnel-client into the DWB external directory.")
+                Text("Installs Desktop Commander 0.2.50 and the pinned native tunnel-client into your DWB Application Support directory, then configures and validates the selected workspace.")
                     .foregroundStyle(.secondary)
                 HStack {
-                    Button("Install / Repair") {
+                    Button("Install & Configure") {
                         Task { await model.installMachine() }
                     }
-                    .disabled(model.isBusy)
+                    .disabled(model.isBusy || model.workspacePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     Button("Run Doctor") {
                         Task { await model.runDoctor() }
                     }
@@ -336,8 +390,8 @@ struct PreferencesView: View {
                 }
             }
 
-            Section("Development runtime") {
-                Text("The prototype uses DWB_APP_ROOT when set, otherwise the current working directory. Production app-bundle resource discovery will replace this in the packaging phase.")
+            Section("Runtime") {
+                Text("Release builds use the Node.js runtime and DWB Core bundled inside the application. DWB_APP_ROOT and DWB_NODE_PATH remain available as development overrides.")
                     .foregroundStyle(.secondary)
             }
         }
