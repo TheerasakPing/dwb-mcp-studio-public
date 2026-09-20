@@ -2,22 +2,23 @@ name: macOS Published Release Acceptance
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'scripts/macos-release-acceptance.sh'
-      - '.github/workflows/acceptance-macos.yml'
-      - 'package.json'
+  workflow_run:
+    workflows:
+      - Release macOS
+    types:
+      - completed
 
 permissions:
   contents: read
 
 jobs:
   published-dmg:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-node@v4
         with:
