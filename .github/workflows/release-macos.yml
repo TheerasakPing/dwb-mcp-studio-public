@@ -21,6 +21,12 @@ jobs:
     runs-on: macos-15
     env:
       GH_TOKEN: ${{ github.token }}
+      MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGN_IDENTITY_SECRET: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD_SECRET: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
 
     steps:
       - uses: actions/checkout@v4
@@ -44,11 +50,11 @@ jobs:
           npm test
 
       - name: Import Developer ID certificate
-        if: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 != '' && secrets.MACOS_CERTIFICATE_PASSWORD != '' && secrets.MACOS_SIGN_IDENTITY != '' }}
+        if: ${{ env.MACOS_CERTIFICATE_P12_BASE64 != '' && env.MACOS_CERTIFICATE_PASSWORD != '' && env.MACOS_SIGN_IDENTITY_SECRET != '' }}
         env:
-          CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          CERTIFICATE_P12_BASE64: ${{ env.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ env.MACOS_CERTIFICATE_PASSWORD }}
+          SIGN_IDENTITY: ${{ env.MACOS_SIGN_IDENTITY_SECRET }}
         run: |
           KEYCHAIN_PASSWORD="$(uuidgen)"
           KEYCHAIN_PATH="$RUNNER_TEMP/dwb-signing.keychain-db"
@@ -65,11 +71,11 @@ jobs:
         run: bash scripts/build-macos-release.sh
 
       - name: Notarize DMG
-        if: ${{ secrets.APPLE_ID != '' && secrets.APPLE_APP_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && secrets.MACOS_SIGN_IDENTITY != '' }}
+        if: ${{ env.APPLE_ID_SECRET != '' && env.APPLE_APP_PASSWORD_SECRET != '' && env.APPLE_TEAM_ID_SECRET != '' && env.MACOS_SIGN_IDENTITY_SECRET != '' }}
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ env.APPLE_ID_SECRET }}
+          APPLE_APP_PASSWORD: ${{ env.APPLE_APP_PASSWORD_SECRET }}
+          APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID_SECRET }}
         run: |
           DMG="$(find releases/macos -maxdepth 1 -name '*.dmg' -print -quit)"
           test -n "$DMG"
