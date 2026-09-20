@@ -1,6 +1,27 @@
 name: Public core
 on: [push, pull_request]
 jobs:
+  macos-arm64-core:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm test
+      - name: Confirm Apple Silicon runner
+        run: |
+          test "$(uname -m)" = "arm64"
+          node -e "if (process.arch !== 'arm64') process.exit(1)"
+      - name: Install Desktop Commander 0.2.50
+        run: |
+          npm install --prefix "$RUNNER_TEMP/dwb-worker" --save-exact '@wonderwhy-er/desktop-commander@0.2.50'
+          echo "DWB_WORKER_ENTRY=$RUNNER_TEMP/dwb-worker/node_modules/@wonderwhy-er/desktop-commander/dist/index.js" >> "$GITHUB_ENV"
+      - run: npm run test:integration
+
   verify:
     runs-on: windows-latest
     steps:
