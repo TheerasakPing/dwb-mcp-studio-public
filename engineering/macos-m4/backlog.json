@@ -1,0 +1,634 @@
+{
+  "version": 1,
+  "project": {
+    "title": "DWB MCP Studio — macOS M4 Port",
+    "description": "พอร์ต DWB MCP Studio ไปเป็น macOS Apple Silicon native arm64 โดยรักษา Windows beta.14 behavior และ Core architecture เดิม",
+    "target": "beta.15-macos"
+  },
+  "items": [
+    {
+      "id": "MAC-001",
+      "title": "Freeze Windows beta.14 compatibility baseline",
+      "phase": "0",
+      "priority": "P0",
+      "area": "Validation",
+      "platform": "Cross-platform",
+      "risk": "Medium",
+      "depends_on": [],
+      "summary": "บันทึก behavior, tool surface, config/runtime layout และ release/upgrade baseline ที่ห้าม regression",
+      "checks": [
+        "บันทึก public tool surface",
+        "บันทึก broker/session/workspace behavior",
+        "บันทึก config schema และ runtime layout",
+        "บันทึก managed dependency versions",
+        "สร้าง Windows compatibility checklist"
+      ]
+    },
+    {
+      "id": "MAC-101",
+      "title": "Remove Windows-only package/runtime guards",
+      "phase": "1",
+      "priority": "P0",
+      "area": "Core",
+      "platform": "Cross-platform",
+      "risk": "Medium",
+      "depends_on": [
+        "MAC-001"
+      ],
+      "summary": "เอาข้อจำกัด win32 และข้อความ .exe ออกจาก Core พร้อม platform helper กลาง",
+      "checks": [
+        "ปรับ package.json os restriction",
+        "ปรับ doctor.mjs",
+        "เพิ่ม platform helper",
+        "ทำ error messages platform-neutral",
+        "รักษา Windows behavior"
+      ]
+    },
+    {
+      "id": "MAC-102",
+      "title": "Validate broker Unix socket lifecycle",
+      "phase": "1",
+      "priority": "P0",
+      "area": "Runtime",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-001"
+      ],
+      "summary": "ยืนยัน broker Unix domain socket, reconnect, duplicate start และ crash recovery บน macOS",
+      "checks": [
+        "ทดสอบ brokerEndpoint บน darwin",
+        "stale socket cleanup",
+        "duplicate broker startup",
+        "broker reconnect",
+        "crash recovery",
+        "socket permissions"
+      ]
+    },
+    {
+      "id": "MAC-103",
+      "title": "Audit macOS filesystem and path semantics",
+      "phase": "1",
+      "priority": "P1",
+      "area": "Core",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-001"
+      ],
+      "summary": "ตรวจ case sensitivity, symlink, Unicode normalization และ workspace boundary บน macOS",
+      "checks": [
+        "ตรวจ toLowerCase path comparisons",
+        "case-sensitive volume tests",
+        "symlink handling",
+        "Unicode normalization",
+        "space/ampersand/Thai paths",
+        "external volume paths"
+      ]
+    },
+    {
+      "id": "MAC-201",
+      "title": "macOS data directory and default shell",
+      "phase": "2",
+      "priority": "P0",
+      "area": "Runtime",
+      "platform": "macOS",
+      "risk": "Medium",
+      "depends_on": [
+        "MAC-101"
+      ],
+      "summary": "ใช้ ~/Library/Application Support และ /bin/zsh พร้อม migration config",
+      "checks": [
+        "กำหนด macOS data root",
+        "คง Windows data root",
+        "แยก Linux fallback",
+        "default shell /bin/zsh",
+        "migrate powershell config",
+        "regenerate mcp-client.json"
+      ]
+    },
+    {
+      "id": "MAC-202",
+      "title": "Cross-platform managed dependency installer",
+      "phase": "2",
+      "priority": "P0",
+      "area": "Installer",
+      "platform": "Cross-platform",
+      "risk": "High",
+      "depends_on": [
+        "MAC-101",
+        "MAC-201"
+      ],
+      "summary": "ย้าย installer primitive สำคัญจาก PowerShell ไป Node พร้อม staging/checksum/rollback",
+      "checks": [
+        "Node-based installer primitives",
+        "staging directory",
+        "atomic promote",
+        "rollback",
+        "SHA-256 verification",
+        "archive traversal protection",
+        "symlink/path escape protection",
+        "upgrade reuse"
+      ]
+    },
+    {
+      "id": "MAC-203",
+      "title": "Desktop Commander 0.2.50 on Apple Silicon",
+      "phase": "2",
+      "priority": "P0",
+      "area": "Installer",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-202"
+      ],
+      "summary": "ติดตั้งและทดสอบ Desktop Commander 0.2.50 + native dependencies แบบ arm64",
+      "checks": [
+        "install pinned Desktop Commander",
+        "validate dist/index.js",
+        "validate dist/config.js",
+        "test sharp arm64",
+        "test @vscode/ripgrep arm64",
+        "test worker isolation loader",
+        "test multi-worker config homes"
+      ]
+    },
+    {
+      "id": "MAC-204",
+      "title": "OpenAI tunnel-client darwin-arm64 installer",
+      "phase": "2",
+      "priority": "P0",
+      "area": "Tunnel",
+      "platform": "macOS",
+      "risk": "Medium",
+      "depends_on": [
+        "MAC-202"
+      ],
+      "summary": "ติดตั้ง tunnel-client v0.0.11 darwin-arm64 พร้อม pinned SHA-256",
+      "checks": [
+        "resolve darwin-arm64 asset",
+        "download upstream release",
+        "verify SHA-256",
+        "safe extract",
+        "chmod executable",
+        "verify --version",
+        "managed-path enforcement",
+        "staging/rollback"
+      ]
+    },
+    {
+      "id": "MAC-301",
+      "title": "POSIX tunnel and process lifecycle",
+      "phase": "3",
+      "priority": "P0",
+      "area": "Runtime",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-204"
+      ],
+      "summary": "แทน taskkill ด้วย process-group lifecycle แบบ POSIX และตรวจ ownership ก่อน stop",
+      "checks": [
+        "process groups",
+        "PID/executable verification",
+        "graceful stop",
+        "forced termination fallback",
+        "health probe",
+        "orphan detection",
+        "restart behavior",
+        "log management"
+      ]
+    },
+    {
+      "id": "MAC-302",
+      "title": "macOS Keychain integration",
+      "phase": "3",
+      "priority": "P0",
+      "area": "Security",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-204"
+      ],
+      "summary": "แทน Windows DPAPI ด้วย macOS Keychain และไม่ให้ plaintext API key ลง disk/argv/log",
+      "checks": [
+        "Keychain service/account",
+        "save/read/delete API key",
+        "no plaintext on disk",
+        "no secret in argv",
+        "environment-only injection",
+        "remove runtime key before core",
+        "log/error redaction"
+      ]
+    },
+    {
+      "id": "MAC-303",
+      "title": "macOS login and startup lifecycle",
+      "phase": "3",
+      "priority": "P1",
+      "area": "Runtime",
+      "platform": "macOS",
+      "risk": "Medium",
+      "depends_on": [
+        "MAC-301",
+        "MAC-302"
+      ],
+      "summary": "Login Item, auto-connect, duplicate app prevention และ lifecycle settings",
+      "checks": [
+        "Login Item",
+        "Start MCP automatically",
+        "launch hidden/menu bar",
+        "close behavior",
+        "single UI instance",
+        "restore existing app",
+        "preserve MCP according to setting"
+      ]
+    },
+    {
+      "id": "MAC-401",
+      "title": "Create native SwiftUI/AppKit application shell",
+      "phase": "4",
+      "priority": "P0",
+      "area": "UI",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-201",
+        "MAC-301",
+        "MAC-302"
+      ],
+      "summary": "สร้าง DWB MCP Studio.app แบบ native arm64 และ bridge ไป Node runtime",
+      "checks": [
+        "Xcode project",
+        "bundle identifier",
+        "app icon assets",
+        "navigation architecture",
+        "shared app state",
+        "Swift↔Node process bridge",
+        "error presentation",
+        "Thai/English architecture"
+      ]
+    },
+    {
+      "id": "MAC-402",
+      "title": "Machine Setup screen",
+      "phase": "4",
+      "priority": "P0",
+      "area": "UI",
+      "platform": "macOS",
+      "risk": "Medium",
+      "depends_on": [
+        "MAC-401",
+        "MAC-203",
+        "MAC-204"
+      ],
+      "summary": "หน้า Setup ตรวจ Node/npm เลือก workspace/worker cap และติดตั้ง dependencies",
+      "checks": [
+        "Node detection",
+        "npm detection",
+        "folder picker",
+        "worker-cap selector",
+        "install/update action",
+        "progress phases",
+        "cancel behavior",
+        "diagnostics",
+        "success/failure state"
+      ]
+    },
+    {
+      "id": "MAC-403",
+      "title": "Tunnel Settings screen",
+      "phase": "4",
+      "priority": "P0",
+      "area": "UI",
+      "platform": "macOS",
+      "risk": "Medium",
+      "depends_on": [
+        "MAC-401",
+        "MAC-301",
+        "MAC-302"
+      ],
+      "summary": "หน้า Tunnel ID/API key + Remember + Start/Stop + readiness",
+      "checks": [
+        "Tunnel ID input",
+        "secure API key input",
+        "Remember key",
+        "Start MCP",
+        "Stop MCP",
+        "health/readiness",
+        "validation/error states"
+      ]
+    },
+    {
+      "id": "MAC-404",
+      "title": "Native macOS Dashboard",
+      "phase": "4",
+      "priority": "P1",
+      "area": "UI",
+      "platform": "macOS",
+      "risk": "Medium",
+      "depends_on": [
+        "MAC-401",
+        "MAC-402",
+        "MAC-403"
+      ],
+      "summary": "Dashboard แสดง tunnel/broker/workers/queue/sessions/events แบบ non-invasive",
+      "checks": [
+        "Tunnel state",
+        "Broker state",
+        "worker capacity",
+        "queue count",
+        "sessions list",
+        "workspace",
+        "worker PID",
+        "recent events",
+        "redaction",
+        "3-second non-invasive refresh"
+      ]
+    },
+    {
+      "id": "MAC-405",
+      "title": "Menu Bar and Preferences",
+      "phase": "4",
+      "priority": "P1",
+      "area": "UI",
+      "platform": "macOS",
+      "risk": "Medium",
+      "depends_on": [
+        "MAC-303",
+        "MAC-401"
+      ],
+      "summary": "Menu Bar, Start/Stop, hide/quit และ preferences สำหรับ startup/auto-connect",
+      "checks": [
+        "Menu Bar icon",
+        "Open Dashboard",
+        "Hide",
+        "Start/Stop MCP",
+        "Quit UI only",
+        "Quit + stop MCP",
+        "close/minimize preferences",
+        "login item preference",
+        "auto-connect preference"
+      ]
+    },
+    {
+      "id": "MAC-501",
+      "title": "Cross-platform unit and regression matrix",
+      "phase": "5",
+      "priority": "P0",
+      "area": "CI",
+      "platform": "Cross-platform",
+      "risk": "High",
+      "depends_on": [
+        "MAC-101",
+        "MAC-102",
+        "MAC-103",
+        "MAC-201"
+      ],
+      "summary": "รัน Core tests บน Windows+macOS ครอบคลุม path/socket/config/workspace/payload/runtime upgrade",
+      "checks": [
+        "Windows core tests",
+        "macOS core tests",
+        "path tests",
+        "Unix socket tests",
+        "config migration tests",
+        "worker lifecycle tests",
+        "workspace tests",
+        "payload guard tests",
+        "runtime upgrade tests"
+      ]
+    },
+    {
+      "id": "MAC-502",
+      "title": "Real Desktop Commander integration on macOS",
+      "phase": "5",
+      "priority": "P0",
+      "area": "Validation",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-203",
+        "MAC-501"
+      ],
+      "summary": "integration suite กับ Desktop Commander upstream จริงบน macOS",
+      "checks": [
+        "two sessions/two workers",
+        "separate workspaces",
+        "file boundary",
+        "command CWD",
+        "crash recovery",
+        "idle reclaim",
+        "capacity queue",
+        "resume detached session",
+        "upstream source hash unchanged"
+      ]
+    },
+    {
+      "id": "MAC-503",
+      "title": "Tunnel integration validation",
+      "phase": "5",
+      "priority": "P0",
+      "area": "Validation",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-301",
+        "MAC-302",
+        "MAC-403"
+      ],
+      "summary": "validate tunnel binary/profile/environment/readiness/start-stop/end-to-end MCP",
+      "checks": [
+        "binary/version test",
+        "profile generation",
+        "environment isolation",
+        "readiness endpoint",
+        "start/stop",
+        "invalid credential handling",
+        "local proxy/end-to-end where available"
+      ]
+    },
+    {
+      "id": "MAC-504",
+      "title": "macOS GitHub Actions workflow",
+      "phase": "5",
+      "priority": "P1",
+      "area": "CI",
+      "platform": "Cross-platform",
+      "risk": "Medium",
+      "depends_on": [
+        "MAC-501",
+        "MAC-502"
+      ],
+      "summary": "เพิ่ม CI macOS พร้อม Node minimum, real worker integration และ artifact reports",
+      "checks": [
+        "macOS runner job",
+        "Node 22.16 minimum",
+        "current Node test",
+        "real Desktop Commander install",
+        "arm64 assumptions validation",
+        "package artifact",
+        "upload reports"
+      ]
+    },
+    {
+      "id": "MAC-601",
+      "title": "Build native arm64 .app",
+      "phase": "6",
+      "priority": "P0",
+      "area": "Release",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-401",
+        "MAC-504"
+      ],
+      "summary": "สร้าง release .app arm64 พร้อม bundle/version/allowlist ที่ชัดเจน",
+      "checks": [
+        "Release configuration",
+        "Node/runtime strategy",
+        "third-party ownership rules",
+        "app metadata/version",
+        "Mach-O arm64 validation",
+        "release allowlist"
+      ]
+    },
+    {
+      "id": "MAC-602",
+      "title": "Code signing and Hardened Runtime",
+      "phase": "6",
+      "priority": "P0",
+      "area": "Security",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-601"
+      ],
+      "summary": "Developer ID signing, entitlements, Hardened Runtime และ nested executable verification",
+      "checks": [
+        "Developer ID Application signing",
+        "entitlements review",
+        "Hardened Runtime",
+        "nested executable signing",
+        "codesign verify",
+        "Gatekeeper validation"
+      ]
+    },
+    {
+      "id": "MAC-603",
+      "title": "Apple notarization and stapling",
+      "phase": "6",
+      "priority": "P0",
+      "area": "Release",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-602"
+      ],
+      "summary": "notarize/staple package และตรวจ Gatekeeper บนเครื่องสะอาด",
+      "checks": [
+        "notarization workflow",
+        "status handling",
+        "staple ticket",
+        "verify notarization",
+        "failure diagnostics"
+      ]
+    },
+    {
+      "id": "MAC-604",
+      "title": "DMG and ZIP release artifacts",
+      "phase": "6",
+      "priority": "P1",
+      "area": "Release",
+      "platform": "macOS",
+      "risk": "Medium",
+      "depends_on": [
+        "MAC-603"
+      ],
+      "summary": "สร้าง DMG/ZIP/SHA-256 และ release allowlist ป้องกัน user data leak",
+      "checks": [
+        "create DMG",
+        "create ZIP",
+        "SHA-256 files",
+        "GitHub Release naming",
+        "release notes",
+        "explicit allowlist",
+        "secret/runtime leak check"
+      ]
+    },
+    {
+      "id": "MAC-605",
+      "title": "Clean-machine acceptance on Apple Silicon M4",
+      "phase": "6",
+      "priority": "P0",
+      "area": "Validation",
+      "platform": "macOS",
+      "risk": "High",
+      "depends_on": [
+        "MAC-604"
+      ],
+      "summary": "end-to-end acceptance บน M4 จริงโดยไม่ใช้ Rosetta",
+      "checks": [
+        "fresh macOS profile",
+        "clean install",
+        "setup",
+        "Keychain",
+        "tunnel",
+        "broker",
+        "multi-worker",
+        "workspace",
+        "restart",
+        "upgrade",
+        "uninstall/cleanup",
+        "M4 physical hardware"
+      ]
+    },
+    {
+      "id": "MAC-701",
+      "title": "macOS user documentation",
+      "phase": "6",
+      "priority": "P1",
+      "area": "Docs",
+      "platform": "macOS",
+      "risk": "Low",
+      "depends_on": [
+        "MAC-404",
+        "MAC-605"
+      ],
+      "summary": "คู่มือ install/first run/workspace/tunnel/keychain/login item/dashboard/update/remove/troubleshooting/security",
+      "checks": [
+        "Installation",
+        "First run",
+        "Workspace",
+        "Tunnel",
+        "Keychain",
+        "Login Item",
+        "Dashboard",
+        "Update",
+        "Removal",
+        "Troubleshooting",
+        "Security boundaries"
+      ]
+    },
+    {
+      "id": "MAC-702",
+      "title": "Shared Windows/macOS documentation cleanup",
+      "phase": "6",
+      "priority": "P2",
+      "area": "Docs",
+      "platform": "Cross-platform",
+      "risk": "Low",
+      "depends_on": [
+        "MAC-701"
+      ],
+      "summary": "แยกข้อความ platform-specific และอัปเดต README/THIRD-PARTY/VALIDATION/PUBLISHING",
+      "checks": [
+        "platform-specific wording",
+        "remove global .exe assumptions",
+        "README compatibility table",
+        "THIRD-PARTY",
+        "VALIDATION",
+        "PUBLISHING"
+      ]
+    }
+  ]
+}
