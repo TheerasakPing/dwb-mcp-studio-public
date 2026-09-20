@@ -51,10 +51,11 @@ async function runtimeStatus() {
 }
 
 try {
-  if (process.platform !== 'win32') throw new Error('This beta is supported on Windows only.');
+  if (!['win32', 'darwin'].includes(process.platform))
+    throw new Error('This beta currently supports Windows and macOS only.');
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (major < 22 || (major === 22 && minor < 16))
-    throw new Error('Install Node.js 22.16 or newer, then rerun DWB MCP Studio.exe.');
+    throw new Error('Install Node.js 22.16 or newer, then rerun DWB MCP Studio.');
   await access(new URL('../dist/index.js', import.meta.url));
   const config = await validateConfig(await readConfig());
   console.log(
@@ -62,6 +63,8 @@ try {
       {
         ok: true,
         node: process.version,
+        platform: process.platform,
+        arch: process.arch,
         configFile: configPath(),
         dataDirectory: dataDir(),
         brokerEndpoint: brokerEndpoint(),
@@ -69,7 +72,7 @@ try {
         runtime: await runtimeStatus(),
         isolation: 'Per-worker config via an in-memory loader; external files are unchanged.',
         transport:
-          'Local stdio with the managed OpenAI tunnel. Open DWB MCP Studio.exe, enter your Tunnel ID and API key, then select Start MCP.',
+          'Local stdio with the managed OpenAI tunnel. Open DWB MCP Studio, enter your Tunnel ID and API key, then select Start MCP.',
       },
       null,
       2,

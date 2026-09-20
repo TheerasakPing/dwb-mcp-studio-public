@@ -1,6 +1,7 @@
 import { RequestLifetime } from './request-lifetime.js';
-import { createServer, type Socket } from 'node:net';
-import { unlink } from 'node:fs/promises';
+import { createConnection, createServer, type Socket } from 'node:net';
+import { open, readFile, unlink } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   brokerEndpoint,
   BROKER_PROTOCOL_VERSION,
@@ -343,8 +344,73 @@ async function shutdown(code: number): Promise<void> {
 process.on('SIGINT', () => void shutdown(0));
 process.on('SIGTERM', () => void shutdown(0));
 
-async function main(): Promise<void> {
-  if (process.platform !== 'win32') await unlink(endpoint).catch(() => {});
+function processAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: any) {
+    return error?.code !== 'ESRCH';
+  }
+}
+
+async function acquireUnixStartupLock(): Promise<() => Promise<void>> {
+  if (process.platform === 'win32') return async () => {};
+  const lockPath = endpoint + '.startup.lock';
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      const handle = await open(lockPath, 'wx', 0o600);
+      await handle.writeFile(String(process.pid) + '\n');
+      let released = false;
+      return async () => {
+        if (released) return;
+        released = true;
+        await handle.close().catch(() => {});
+        await unlink(lockPath).catch((error: any) => {
+          if (error?.code !== 'ENOENT') throw error;
+        });
+      };
+    } catch (error: any) {
+      if (error?.code !== 'EEXIST') throw error;
+      let stale = false;
+      try {
+        const owner = Number((await readFile(lockPath, 'utf8')).trim());
+        stale = !processAlive(owner);
+      } catch (readError: any) {
+        if (readError?.code === 'ENOENT') continue;
+        stale = true;
+      }
+      if (stale) {
+        await unlink(lockPath).catch((unlinkError: any) => {
+          if (unlinkError?.code !== 'ENOENT') throw unlinkError;
+        });
+        continue;
+      }
+      await delay(50);
+    }
+  }
+  throw new Error('DWB_BROKER_STARTUP_LOCK_TIMEOUT: another broker startup did not finish.');
+}
+
+async function endpointIsLive(): Promise<boolean> {
+  return new Promise<boolean>((resolveProbe) => {
+    const socket = createConnection(endpoint);
+    let settled = false;
+    const finish = (live: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      resolveProbe(live);
+    };
+    const timer = setTimeout(() => finish(false), 500);
+    timer.unref();
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+  });
+}
+
+async function listenServer(): Promise<void> {
   await new Promise<void>((resolveListen, rejectListen) => {
     const onError = (error: NodeJS.ErrnoException) => {
       server.off('listening', onListening);
@@ -358,6 +424,30 @@ async function main(): Promise<void> {
     server.once('listening', onListening);
     server.listen(endpoint);
   });
+}
+
+async function claimEndpoint(): Promise<boolean> {
+  const release = await acquireUnixStartupLock();
+  try {
+    try {
+      await listenServer();
+      return true;
+    } catch (error: any) {
+      if (process.platform === 'win32' || error?.code !== 'EADDRINUSE') throw error;
+      if (await endpointIsLive()) return false;
+      await unlink(endpoint).catch((unlinkError: any) => {
+        if (unlinkError?.code !== 'ENOENT') throw unlinkError;
+      });
+      await listenServer();
+      return true;
+    }
+  } finally {
+    await release();
+  }
+}
+
+async function main(): Promise<void> {
+  if (!(await claimEndpoint())) return;
   // Claim the endpoint before opening SQLite: simultaneous cold starts must not
   // race journal/schema initialization or rewrite the live broker's state.
   coreDb = new CoreStore();
