@@ -201,10 +201,14 @@ async function run(command, args, cwd = appRoot) {
   await new Promise((resolveRun, rejectRun) => {
     const child = spawn(command, args, {
       cwd,
-      stdio: 'inherit',
+      stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
       shell: false,
     });
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => process.stderr.write(chunk));
+    child.stderr.on('data', (chunk) => process.stderr.write(chunk));
     child.once('error', rejectRun);
     child.once('exit', (code, signal) => {
       if (code === 0) resolveRun();
