@@ -49,7 +49,10 @@
     "scripts/runtime-control.mjs",
     "scripts/runtime-upgrade.ps1",
     "scripts/preferences-common.ps1",
-    "scripts/preferences-ui.ps1"
+    "scripts/preferences-ui.ps1",
+    "scripts/external.mjs",
+    "scripts/tunnel-runtime-posix.mjs",
+    "scripts/tunnel-runtime-posix-test.mjs"
   ],
   "scripts": {
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.json",
@@ -57,7 +60,7 @@
     "start": "node scripts/start.mjs",
     "configure": "node scripts/configure.mjs",
     "doctor": "node scripts/doctor.mjs",
-    "test": "npm run typecheck && npm run build && tsx src/platform-test.ts && tsx src/request-context-test.ts && tsx src/payload-guard-test.ts && tsx src/worker-circuit-test.ts && tsx src/session-lifecycle-test.ts && tsx src/workspace-binding-test.ts && tsx src/core-hardening-test.ts && node scripts/public-core-test.mjs && node scripts/dashboard-test.mjs",
+    "test": "npm run typecheck && npm run build && tsx src/platform-test.ts && node scripts/tunnel-runtime-posix-test.mjs && tsx src/request-context-test.ts && tsx src/payload-guard-test.ts && tsx src/worker-circuit-test.ts && tsx src/session-lifecycle-test.ts && tsx src/workspace-binding-test.ts && tsx src/core-hardening-test.ts && node scripts/public-core-test.mjs && node scripts/dashboard-test.mjs",
     "test:integration": "node scripts/integration-test.mjs",
     "test:setup": "node scripts/test-powershell.mjs setup-test",
     "release": "npm run build:launcher && npm run build && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1",
@@ -70,7 +73,13 @@
     "test:shell": "node scripts/test-powershell.mjs shell-test",
     "test:runtime-upgrade": "node scripts/test-powershell.mjs runtime-upgrade-test",
     "test:preferences": "node scripts/test-powershell.mjs preferences-test",
-    "project:macos": "node scripts/bootstrap-macos-project.mjs"
+    "project:macos": "node scripts/bootstrap-macos-project.mjs",
+    "external:status": "node scripts/external.mjs status",
+    "external:install-worker": "node scripts/external.mjs install-worker",
+    "external:install-tunnel": "node scripts/external.mjs install-tunnel",
+    "external:install": "node scripts/external.mjs install",
+    "tunnel:posix": "node scripts/tunnel-runtime-posix.mjs",
+    "test:tunnel-posix": "node scripts/tunnel-runtime-posix-test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
