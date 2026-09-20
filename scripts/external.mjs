@@ -1,6 +1,18 @@
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, open, readFile, realpath, rename, rm, unlink } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  chmod,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,6 +27,8 @@ const workerEntry = resolve(
   'dist',
   'index.js',
 );
+const tunnelRoot = resolve(externalRoot, 'tunnel-client');
+const tunnelEntry = resolve(tunnelRoot, 'tunnel-client');
 
 async function exists(path) {
   try {
@@ -181,6 +195,168 @@ async function run(command, args, cwd = appRoot) {
   });
 }
 
+async function runCapture(command, args, cwd = appRoot) {
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      shell: false,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.once('error', rejectRun);
+    child.once('exit', (code, signal) => {
+      if (code === 0) resolveRun(stdout.trim());
+      else
+        rejectRun(
+          new Error(
+            `External installer command failed (${code ?? signal ?? 'unknown'}): ${command}\n${stderr.trim()}`,
+          ),
+        );
+    });
+  });
+}
+
+function tunnelAsset() {
+  if (process.platform !== 'darwin' || process.arch !== 'arm64')
+    throw new Error('The Node tunnel installer currently supports macOS Apple Silicon only.');
+  return {
+    version: '0.0.11',
+    url: 'https://github.com/openai/tunnel-client/releases/download/v0.0.11/tunnel-client-v0.0.11-darwin-arm64.zip',
+    sha256: '3685443b057614ff932d2d477dab94be2082e60bcf4e8b4e378bebc89121b714',
+  };
+}
+
+async function tunnelState() {
+  try {
+    await assertManagedPath(tunnelRoot);
+    const actualEntry = await realpath(tunnelEntry);
+    if (!inside(tunnelRoot, actualEntry))
+      throw new Error('Tunnel client resolved outside the managed tunnel directory.');
+    const version = await runCapture(actualEntry, ['--version']);
+    if (!/^0\.0\.11(?:\+|\s|$)/.test(version))
+      throw new Error('This DWB version requires tunnel-client 0.0.11.');
+    return { ready: true, version, entry: actualEntry };
+  } catch (error) {
+    return {
+      ready: false,
+      version: null,
+      entry: tunnelEntry,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function safeArchiveEntry(name) {
+  if (!name || name.includes('\\') || name.includes(':') || name.startsWith('/')) return false;
+  const parts = name.split('/');
+  return !parts.some((part) => part === '..' || part === '');
+}
+
+async function rejectExtractedLinks(root) {
+  async function walk(path) {
+    for (const entry of await readdir(path, { withFileTypes: true })) {
+      const child = resolve(path, entry.name);
+      const info = await lstat(child);
+      if (info.isSymbolicLink())
+        throw new Error('Tunnel archive may not contain symbolic links.');
+      if (info.isDirectory()) await walk(child);
+    }
+  }
+  await walk(root);
+}
+
+async function findTunnelBinary(root) {
+  const matches = [];
+  async function walk(path) {
+    for (const entry of await readdir(path, { withFileTypes: true })) {
+      const child = resolve(path, entry.name);
+      if (entry.isDirectory()) await walk(child);
+      else if (entry.isFile() && entry.name === 'tunnel-client') matches.push(child);
+    }
+  }
+  await walk(root);
+  if (matches.length !== 1)
+    throw new Error(`Expected exactly one tunnel-client binary in archive, found ${matches.length}.`);
+  return matches[0];
+}
+
+async function installTunnel() {
+  const release = await acquireInstallLock();
+  let stage = null;
+  try {
+    const current = await tunnelState();
+    if (current.ready) return current;
+    if (await exists(tunnelRoot))
+      throw new Error(
+        'Tunnel installation is incomplete or unsupported. Rename external/tunnel-client to keep a backup, then retry.',
+      );
+
+    const asset = tunnelAsset();
+    stage = resolve(externalRoot, '.install-tunnel-' + randomUUID().replaceAll('-', ''));
+    await assertManagedPath(stage);
+    await mkdir(stage, { recursive: false });
+    const archive = resolve(stage, 'download.zip');
+    const unpacked = resolve(stage, 'package');
+
+    const response = await fetch(asset.url, { redirect: 'follow' });
+    if (!response.ok) throw new Error(`Tunnel download failed: HTTP ${response.status}`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    if (digest !== asset.sha256)
+      throw new Error('Tunnel download checksum did not match the pinned upstream release.');
+    await writeFile(archive, bytes, { flag: 'wx', mode: 0o600 });
+
+    const listing = await runCapture('/usr/bin/unzip', ['-Z1', archive]);
+    const entries = listing.split(/\r?\n/).filter(Boolean);
+    if (!entries.length || entries.some((name) => !safeArchiveEntry(name)))
+      throw new Error('Unexpected path in tunnel archive.');
+
+    await mkdir(unpacked, { recursive: false });
+    await run('/usr/bin/unzip', ['-q', archive, '-d', unpacked]);
+    await rejectExtractedLinks(unpacked);
+
+    const binary = await findTunnelBinary(unpacked);
+    await chmod(binary, 0o755);
+    const version = await runCapture(binary, ['--version']);
+    if (!/^0\.0\.11(?:\+|\s|$)/.test(version))
+      throw new Error('Downloaded tunnel-client did not pass the pinned version check.');
+
+    const packageDir = dirname(binary);
+    await assertManagedPath(tunnelRoot);
+    if (packageDir === unpacked) {
+      await rename(unpacked, tunnelRoot);
+    } else {
+      await rename(packageDir, tunnelRoot);
+      await rm(unpacked, { recursive: true, force: true });
+    }
+    stage = resolve(stage);
+    await rm(stage, { recursive: true, force: true });
+    stage = null;
+
+    const installed = await tunnelState();
+    if (!installed.ready) throw new Error(installed.message || 'Tunnel validation failed.');
+    return { ...installed, installed: true, sha256: asset.sha256 };
+  } finally {
+    if (
+      stage &&
+      inside(externalRoot, stage) &&
+      /^\.install-tunnel-[a-f0-9]{32}$/.test(stage.split(/[\\/]/).at(-1) || '')
+    )
+      await rm(stage, { recursive: true, force: true }).catch(() => {});
+    await release();
+  }
+}
+
 async function installWorker() {
   const release = await acquireInstallLock();
   let stage = null;
@@ -259,14 +435,30 @@ async function installWorker() {
 async function main() {
   const action = process.argv[2] || 'status';
   if (action === 'status') {
-    console.log(JSON.stringify({ worker: await workerState() }, null, 2));
+    console.log(JSON.stringify({ worker: await workerState(), tunnel: await tunnelState() }, null, 2));
     return;
   }
   if (action === 'install-worker') {
     console.log(JSON.stringify({ worker: await installWorker() }, null, 2));
     return;
   }
-  throw new Error('Usage: node scripts/external.mjs [status|install-worker]');
+  if (action === 'install-tunnel') {
+    console.log(JSON.stringify({ tunnel: await installTunnel() }, null, 2));
+    return;
+  }
+  if (action === 'install') {
+    console.log(
+      JSON.stringify(
+        { worker: await installWorker(), tunnel: await installTunnel() },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+  throw new Error(
+    'Usage: node scripts/external.mjs [status|install-worker|install-tunnel|install]',
+  );
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -276,4 +468,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   });
 }
 
-export { appRoot, externalRoot, workerRoot, workerEntry, workerState, installWorker };
+export {
+  appRoot,
+  externalRoot,
+  workerRoot,
+  workerEntry,
+  workerState,
+  installWorker,
+  tunnelRoot,
+  tunnelEntry,
+  tunnelState,
+  installTunnel,
+};
