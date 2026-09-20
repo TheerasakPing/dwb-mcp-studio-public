@@ -16,6 +16,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-macos-main
+  cancel-in-progress: false
+
 jobs:
   build-release:
     runs-on: macos-15
