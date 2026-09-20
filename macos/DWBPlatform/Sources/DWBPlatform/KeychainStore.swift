@@ -31,8 +31,7 @@ public struct KeychainStore: Sendable {
         ]
 
         let updates: [CFString: Any] = [
-            kSecValueData: data,
-            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecValueData: data
         ]
 
         let updateStatus = SecItemUpdate(query as CFDictionary, updates as CFDictionary)
