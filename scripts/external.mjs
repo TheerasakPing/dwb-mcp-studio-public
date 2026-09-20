@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   chmod,
@@ -14,7 +14,7 @@ import {
   unlink,
   writeFile,
 } from 'node:fs/promises';
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dataDir } from '../dist/paths.js';
 
@@ -45,8 +45,23 @@ async function exists(path) {
   }
 }
 
+function physicalPath(value) {
+  let current = resolve(value);
+  const suffix = [];
+  while (!existsSync(current)) {
+    const parent = dirname(current);
+    if (parent === current) break;
+    suffix.unshift(basename(current));
+    current = parent;
+  }
+  try {
+    current = realpathSync.native(current);
+  } catch {}
+  return resolve(current, ...suffix);
+}
+
 function inside(root, target) {
-  const rel = relative(resolve(root), resolve(target));
+  const rel = relative(physicalPath(root), physicalPath(target));
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
