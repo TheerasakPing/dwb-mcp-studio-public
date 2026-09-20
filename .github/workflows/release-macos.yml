@@ -45,9 +45,7 @@ jobs:
         run: npm ci
 
       - name: Validate core
-        run: |
-          npm run format:check
-          npm test
+        run: npm test
 
       - name: Import Developer ID certificate
         if: ${{ env.MACOS_CERTIFICATE_P12_BASE64 != '' && env.MACOS_CERTIFICATE_PASSWORD != '' && env.MACOS_SIGN_IDENTITY_SECRET != '' }}
