@@ -73,7 +73,9 @@
     "test:preferences": "node scripts/test-powershell.mjs preferences-test",
     "project:macos": "node scripts/bootstrap-macos-project.mjs",
     "external:status": "node scripts/external.mjs status",
-    "external:install-worker": "node scripts/external.mjs install-worker"
+    "external:install-worker": "node scripts/external.mjs install-worker",
+    "external:install-tunnel": "node scripts/external.mjs install-tunnel",
+    "external:install": "node scripts/external.mjs install"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",

@@ -20,6 +20,7 @@ jobs:
         run: |
           npm run external:install-worker
           echo "DWB_WORKER_ENTRY=$GITHUB_WORKSPACE/external/desktop-commander/node_modules/@wonderwhy-er/desktop-commander/dist/index.js" >> "$GITHUB_ENV"
+      - run: npm run external:install-tunnel
       - run: npm run external:status
       - run: npm run test:integration
 
