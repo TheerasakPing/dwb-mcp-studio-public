@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { createConnection, type Socket } from 'node:net';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { samePath } from './platform.js';
 import {
   brokerEndpoint,
   type BrokerLogicalContext,
@@ -128,7 +129,8 @@ export class BrokerClient {
     const running = hello?.broker?.runtime;
     if (
       running?.version !== runtimeIdentity.version ||
-      running?.appRoot?.toLowerCase() !== runtimeIdentity.appRoot.toLowerCase()
+      typeof running?.appRoot !== 'string' ||
+      !samePath(running.appRoot, runtimeIdentity.appRoot)
     )
       throw new Error(
         'DWB_RUNTIME_MISMATCH: another release is still running. Finish its work, Stop MCP, then open Setup in this release to update the broker. Saved settings are retained.',
