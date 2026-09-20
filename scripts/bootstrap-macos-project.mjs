@@ -247,9 +247,6 @@ function setSelect(project, projectNumber, fields, item, fieldName, optionName) 
     [
       'project',
       'item-edit',
-      String(projectNumber),
-      '--owner',
-      owner,
       '--id',
       item.id,
       '--field-id',
