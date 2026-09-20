@@ -1,0 +1,137 @@
+name: Release macOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'macos/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/release-macos.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: macos-15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGN_IDENTITY_SECRET: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD_SECRET: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: npm
+
+      - name: Verify Apple Silicon
+        run: |
+          test "$(uname -m)" = "arm64"
+          node -e "if (process.arch !== 'arm64') process.exit(1)"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate core
+        run: |
+          npm run format:check
+          npm test
+
+      - name: Import Developer ID certificate
+        if: ${{ env.MACOS_CERTIFICATE_P12_BASE64 != '' && env.MACOS_CERTIFICATE_PASSWORD != '' && env.MACOS_SIGN_IDENTITY_SECRET != '' }}
+        env:
+          CERTIFICATE_P12_BASE64: ${{ env.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ env.MACOS_CERTIFICATE_PASSWORD }}
+          SIGN_IDENTITY: ${{ env.MACOS_SIGN_IDENTITY_SECRET }}
+        run: |
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          KEYCHAIN_PATH="$RUNNER_TEMP/dwb-signing.keychain-db"
+          echo "$CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dwb-signing.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/dwb-signing.p12" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          echo "MACOS_SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Build app, DMG and ZIP
+        run: bash scripts/build-macos-release.sh
+
+      - name: Notarize DMG
+        if: ${{ env.APPLE_ID_SECRET != '' && env.APPLE_APP_PASSWORD_SECRET != '' && env.APPLE_TEAM_ID_SECRET != '' && env.MACOS_SIGN_IDENTITY_SECRET != '' }}
+        env:
+          APPLE_ID: ${{ env.APPLE_ID_SECRET }}
+          APPLE_APP_PASSWORD: ${{ env.APPLE_APP_PASSWORD_SECRET }}
+          APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID_SECRET }}
+        run: |
+          DMG="$(find releases/macos -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$DMG"
+          xcrun notarytool submit "$DMG"             --apple-id "$APPLE_ID"             --password "$APPLE_APP_PASSWORD"             --team-id "$APPLE_TEAM_ID"             --wait
+          xcrun stapler staple "$DMG"
+          echo "DWB_NOTARIZED=true" >> "$GITHUB_ENV"
+          (
+            cd releases/macos
+            shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
+          )
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DWB-MCP-Studio-macOS-arm64
+          path: |
+            releases/macos/*.dmg
+            releases/macos/*.zip
+            releases/macos/SHA256SUMS.txt
+
+      - name: Prepare release notes
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [[ -n "${MACOS_SIGN_IDENTITY:-}" ]]; then
+            SIGNING="Developer ID signed"
+          else
+            SIGNING="ad-hoc signed beta"
+          fi
+          if [[ "${DWB_NOTARIZED:-false}" == "true" ]]; then
+            NOTARIZATION="notarized and stapled"
+          else
+            NOTARIZATION="not notarized"
+          fi
+          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
+          # DWB MCP Studio $VERSION — macOS Apple Silicon
+
+          Native macOS beta for Apple Silicon (M1–M4+).
+
+          - Architecture: arm64
+          - macOS minimum: 13.0
+          - Desktop Commander: 0.2.50 managed install
+          - OpenAI tunnel-client: 0.0.11 darwin-arm64
+          - Signing: $SIGNING
+          - Notarization: $NOTARIZATION
+
+          Use the DMG for normal installation. SHA-256 checksums are included.
+          EOF
+
+      - name: Create or update GitHub prerelease
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v$VERSION"
+          TITLE="DWB MCP Studio $TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" releases/macos/*.dmg releases/macos/*.zip releases/macos/SHA256SUMS.txt --clobber
+            gh release edit "$TAG"               --title "$TITLE"               --notes-file "$RUNNER_TEMP/release-notes.md"               --prerelease
+          else
+            gh release create "$TAG"               --target "$GITHUB_SHA"               --title "$TITLE"               --notes-file "$RUNNER_TEMP/release-notes.md"               --prerelease               releases/macos/*.dmg               releases/macos/*.zip               releases/macos/SHA256SUMS.txt
+          fi

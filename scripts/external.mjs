@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   chmod,
@@ -15,9 +16,13 @@ import {
 } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { dataDir } from '../dist/paths.js';
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const externalRoot = resolve(appRoot, 'external');
+const externalRoot = resolve(
+  process.env.DWB_EXTERNAL_DIR ||
+    (process.platform === 'darwin' ? resolve(dataDir(), 'external') : resolve(appRoot, 'external')),
+);
 const workerRoot = resolve(externalRoot, 'desktop-commander');
 const workerEntry = resolve(
   workerRoot,
@@ -168,6 +173,9 @@ async function workerState() {
 function npmInvocation(args) {
   if (process.env.npm_execpath)
     return { command: process.execPath, args: [process.env.npm_execpath, ...args] };
+  const bundledNpm = resolve(appRoot, 'node', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  if (existsSync(bundledNpm))
+    return { command: process.execPath, args: [bundledNpm, ...args] };
   return {
     command: process.platform === 'win32' ? 'npm.cmd' : 'npm',
     args,

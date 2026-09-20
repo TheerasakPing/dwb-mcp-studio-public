@@ -31,21 +31,45 @@ public struct NodeBridge: Sendable {
 
     public static func discover(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        currentDirectory: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        currentDirectory: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+        bundle: Bundle = .main
     ) throws -> NodeBridge {
-        let appRoot = environment["DWB_APP_ROOT"].map { URL(fileURLWithPath: $0) } ?? currentDirectory
-        guard let node = discoverNode(environment: environment) else {
+        let bundledRuntime = bundle.resourceURL?.appendingPathComponent("runtime", isDirectory: true)
+        let bundledRuntimeExists = bundledRuntime.map {
+            FileManager.default.fileExists(atPath: $0.path)
+        } ?? false
+
+        let appRoot: URL
+        if let explicit = environment["DWB_APP_ROOT"], !explicit.isEmpty {
+            appRoot = URL(fileURLWithPath: explicit)
+        } else if bundledRuntimeExists, let bundledRuntime {
+            appRoot = bundledRuntime
+        } else {
+            appRoot = currentDirectory
+        }
+
+        guard let node = discoverNode(environment: environment, bundledRuntime: bundledRuntimeExists ? appRoot : nil) else {
             throw NodeBridgeError.nodeNotFound
         }
         return NodeBridge(appRoot: appRoot, nodeExecutable: node)
     }
 
     public static func discoverNode(
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        bundledRuntime: URL? = nil
     ) -> URL? {
         var candidates: [String] = []
         if let explicit = environment["DWB_NODE_PATH"], !explicit.isEmpty {
             candidates.append(explicit)
+        }
+        if let bundledRuntime {
+            candidates.append(
+                bundledRuntime
+                    .appendingPathComponent("node")
+                    .appendingPathComponent("bin")
+                    .appendingPathComponent("node")
+                    .path
+            )
         }
         candidates.append(contentsOf: [
             "/opt/homebrew/bin/node",
