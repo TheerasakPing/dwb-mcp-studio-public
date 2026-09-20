@@ -16,10 +16,11 @@ jobs:
         run: |
           test "$(uname -m)" = "arm64"
           node -e "if (process.arch !== 'arm64') process.exit(1)"
-      - name: Install Desktop Commander 0.2.50
+      - name: Install managed Desktop Commander 0.2.50
         run: |
-          npm install --prefix "$RUNNER_TEMP/dwb-worker" --save-exact '@wonderwhy-er/desktop-commander@0.2.50'
-          echo "DWB_WORKER_ENTRY=$RUNNER_TEMP/dwb-worker/node_modules/@wonderwhy-er/desktop-commander/dist/index.js" >> "$GITHUB_ENV"
+          npm run external:install-worker
+          echo "DWB_WORKER_ENTRY=$GITHUB_WORKSPACE/external/desktop-commander/node_modules/@wonderwhy-er/desktop-commander/dist/index.js" >> "$GITHUB_ENV"
+      - run: npm run external:status
       - run: npm run test:integration
 
   verify:
