@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { dataDir } from '../dist/paths.js';
 import { externalWorker } from '../dist/external-worker.js';
@@ -20,6 +20,9 @@ export async function validateConfig(config) {
     throw new Error(
       'Choose an existing absolute workspace directory with DWB MCP Studio or DWB_WORKSPACE.',
     );
+  const resolvedWorkspace = resolve(workspace);
+  const canonicalWorkspace =
+    process.platform === 'darwin' ? await realpath(resolvedWorkspace) : resolvedWorkspace;
   const workerCap = Number(process.env.DWB_WORKER_CAP || config.workerCap || 4);
   if (!Number.isInteger(workerCap) || workerCap < 1 || workerCap > 64)
     throw new Error('workerCap must be an integer from 1 to 64.');
@@ -35,7 +38,7 @@ export async function validateConfig(config) {
   }
   return {
     workerEntry: worker.entry,
-    workspace: resolve(workspace),
+    workspace: canonicalWorkspace,
     workerCap,
     basePolicy,
     version: worker.version,
