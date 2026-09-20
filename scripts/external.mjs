@@ -258,7 +258,9 @@ async function tunnelState() {
 
 function safeArchiveEntry(name) {
   if (!name || name.includes('\\') || name.includes(':') || name.startsWith('/')) return false;
-  const parts = name.split('/');
+  const normalized = name.endsWith('/') ? name.slice(0, -1) : name;
+  if (!normalized) return false;
+  const parts = normalized.split('/');
   return !parts.some((part) => part === '..' || part === '');
 }
 
