@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { runtimeDir } from './paths.js';
 
@@ -17,10 +17,23 @@ export async function prepareWorkerHome(
   } catch (error) {
     throw new Error(`Cannot read DWB_BASE_DC_CONFIG: ${String(error)}`);
   }
+  const configuredDirectories = source.allowedDirectories ?? [workspace];
+  const allowedDirectories =
+    process.platform === 'darwin'
+      ? await Promise.all(
+          configuredDirectories.map(async (directory: string) => {
+            try {
+              return await realpath(resolve(directory));
+            } catch {
+              return resolve(directory);
+            }
+          }),
+        )
+      : configuredDirectories;
   const config = {
     blockedCommands: source.blockedCommands,
     defaultShell: source.defaultShell,
-    allowedDirectories: source.allowedDirectories ?? [workspace],
+    allowedDirectories,
     telemetryEnabled: false,
     fileWriteLineLimit: source.fileWriteLineLimit,
     fileReadLineLimit: source.fileReadLineLimit,
