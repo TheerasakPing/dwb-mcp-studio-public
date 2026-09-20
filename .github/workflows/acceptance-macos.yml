@@ -1,0 +1,35 @@
+name: macOS Published Release Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/macos-release-acceptance.sh'
+      - '.github/workflows/acceptance-macos.yml'
+      - 'package.json'
+
+permissions:
+  contents: read
+
+jobs:
+  published-dmg:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: npm
+
+      - name: Confirm native Apple Silicon
+        run: |
+          test "$(uname -m)" = "arm64"
+          node -e "if (process.arch !== 'arm64') process.exit(1)"
+
+      - name: Run clean published DMG acceptance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/macos-release-acceptance.sh
