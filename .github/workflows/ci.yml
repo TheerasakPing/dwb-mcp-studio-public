@@ -25,6 +25,8 @@ jobs:
       - run: npm run test:integration
       - name: Test native macOS platform layer
         run: swift test --package-path macos/DWBPlatform
+      - name: Build native SwiftUI shell
+        run: swift build --package-path macos/DWBMCPStudioApp
 
   verify:
     runs-on: windows-latest
