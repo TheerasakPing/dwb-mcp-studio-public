@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { samePath } from './platform.js';
 import { writeTestBaseConfig } from './test-policy.js';
 
 await mkdir(resolve('logs'), { recursive: true });
@@ -26,14 +27,18 @@ try {
   await Promise.all(clients.map((client) => client.listTools()));
   await first.callTool('workspace', { action: 'bind', path: a });
   await second.callTool('workspace', { action: 'bind', path: b });
+  const cwdProbe = '.dwb-shell-cwd.txt';
   const shell =
     process.platform === 'win32'
       ? {
-          command: '[Console]::WriteLine((Get-Location).Path)',
+          command:
+            "[IO.File]::WriteAllText((Join-Path (Get-Location).Path '" +
+            cwdProbe +
+            "'), (Get-Location).Path)",
           shell: 'powershell.exe',
         }
       : {
-          command: 'pwd',
+          command: 'pwd > ' + cwdProbe,
           shell: '/bin/zsh',
         };
   const result = await first.callTool('start_process', {
@@ -41,10 +46,16 @@ try {
     timeout_ms: 3000,
   });
   assert.notEqual(result.isError, true, JSON.stringify(result));
-  assert.ok(
-    JSON.stringify(result).includes(a.replaceAll('\\', '\\\\')),
-    'Shell must start in the bound workspace',
-  );
+  let observedCwd = '';
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      observedCwd = (await readFile(resolve(a, cwdProbe), 'utf8')).trim();
+      if (observedCwd) break;
+    } catch {}
+    await new Promise((done) => setTimeout(done, 100));
+  }
+  assert.ok(observedCwd, 'Shell CWD probe was not created');
+  assert.equal(samePath(observedCwd, a), true, 'Shell must start in the bound workspace');
   await first.callTool('write_file', {
     path: resolve(a, 'a.txt'),
     content: 'first chat',
